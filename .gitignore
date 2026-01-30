@@ -1,2 +1,20 @@
-/target
-/target
+# Build artifacts
+/target/
+target/
+
+# Cargo lock (optional - some projects include it)
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+# Debug
+*.pdb
+
+# Environment
+.env
+.env.local
