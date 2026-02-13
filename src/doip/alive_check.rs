@@ -11,7 +11,11 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PayloadTooShort { expected, actual } => {
-                write!(f, "payload too short: need {} bytes, got {}", expected, actual)
+                write!(
+                    f,
+                    "payload too short: need {} bytes, got {}",
+                    expected, actual
+                )
             }
         }
     }
