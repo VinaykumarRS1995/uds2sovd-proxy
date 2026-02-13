@@ -13,7 +13,11 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PayloadTooShort { expected, actual } => {
-                write!(f, "payload too short: need {} bytes, got {}", expected, actual)
+                write!(
+                    f,
+                    "payload too short: need {} bytes, got {}",
+                    expected, actual
+                )
             }
             Self::InvalidVinLength(len) => write!(f, "VIN must be 17 bytes, got {}", len),
             Self::InvalidEidLength(len) => write!(f, "EID must be 6 bytes, got {}", len),
@@ -145,7 +149,11 @@ impl Response {
     }
 
     pub fn to_bytes(&self) -> Bytes {
-        let len = if self.sync_status.is_some() { Self::MAX_LEN } else { Self::MIN_LEN };
+        let len = if self.sync_status.is_some() {
+            Self::MAX_LEN
+        } else {
+            Self::MIN_LEN
+        };
         let mut buf = BytesMut::with_capacity(len);
         self.write_to(&mut buf);
         buf.freeze()
@@ -266,7 +274,10 @@ mod tests {
         let gid = [0; 6];
 
         let resp = Response::new(vin, 0x1000, eid, gid).with_routing_required();
-        assert_eq!(resp.further_action, FurtherAction::RoutingActivationRequired);
+        assert_eq!(
+            resp.further_action,
+            FurtherAction::RoutingActivationRequired
+        );
     }
 
     #[test]
@@ -289,8 +300,7 @@ mod tests {
         let eid = [0; 6];
         let gid = [0; 6];
 
-        let resp = Response::new(vin, 0x1000, eid, gid)
-            .with_sync_status(SyncStatus::Synchronized);
+        let resp = Response::new(vin, 0x1000, eid, gid).with_sync_status(SyncStatus::Synchronized);
         let bytes = resp.to_bytes();
 
         assert_eq!(bytes.len(), 33);
