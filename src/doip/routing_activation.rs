@@ -36,7 +36,10 @@ impl ResponseCode {
     }
 
     pub fn is_success(self) -> bool {
-        matches!(self, Self::SuccessfullyActivated | Self::ConfirmationRequired)
+        matches!(
+            self,
+            Self::SuccessfullyActivated | Self::ConfirmationRequired
+        )
     }
 }
 
@@ -70,7 +73,11 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PayloadTooShort { expected, actual } => {
-                write!(f, "payload too short: need {} bytes, got {}", expected, actual)
+                write!(
+                    f,
+                    "payload too short: need {} bytes, got {}",
+                    expected, actual
+                )
             }
             Self::UnknownResponseCode(code) => write!(f, "unknown response code: 0x{:02X}", code),
         }
@@ -105,7 +112,12 @@ impl Request {
         let reserved = u32::from_be_bytes([payload[3], payload[4], payload[5], payload[6]]);
 
         let oem_specific = if payload.len() >= Self::MAX_LEN {
-            Some(u32::from_be_bytes([payload[7], payload[8], payload[9], payload[10]]))
+            Some(u32::from_be_bytes([
+                payload[7],
+                payload[8],
+                payload[9],
+                payload[10],
+            ]))
         } else {
             None
         };
@@ -129,7 +141,11 @@ impl Request {
         let source_address = buf.get_u16();
         let activation_type = buf.get_u8();
         let reserved = buf.get_u32();
-        let oem_specific = if buf.remaining() >= 4 { Some(buf.get_u32()) } else { None };
+        let oem_specific = if buf.remaining() >= 4 {
+            Some(buf.get_u32())
+        } else {
+            None
+        };
 
         Ok(Self {
             source_address,
@@ -186,7 +202,11 @@ impl Response {
     }
 
     pub fn to_bytes(&self) -> Bytes {
-        let len = if self.oem_specific.is_some() { Self::MAX_LEN } else { Self::MIN_LEN };
+        let len = if self.oem_specific.is_some() {
+            Self::MAX_LEN
+        } else {
+            Self::MIN_LEN
+        };
         let mut buf = BytesMut::with_capacity(len);
         self.write_to(&mut buf);
         buf.freeze()
@@ -212,12 +232,17 @@ impl Response {
 
         let tester_address = u16::from_be_bytes([payload[0], payload[1]]);
         let entity_address = u16::from_be_bytes([payload[2], payload[3]]);
-        let response_code = ResponseCode::from_u8(payload[4])
-            .ok_or(Error::UnknownResponseCode(payload[4]))?;
+        let response_code =
+            ResponseCode::from_u8(payload[4]).ok_or(Error::UnknownResponseCode(payload[4]))?;
         let reserved = u32::from_be_bytes([payload[5], payload[6], payload[7], payload[8]]);
 
         let oem_specific = if payload.len() >= Self::MAX_LEN {
-            Some(u32::from_be_bytes([payload[9], payload[10], payload[11], payload[12]]))
+            Some(u32::from_be_bytes([
+                payload[9],
+                payload[10],
+                payload[11],
+                payload[12],
+            ]))
         } else {
             None
         };
@@ -269,8 +294,7 @@ mod tests {
     #[test]
     fn parse_request_with_oem() {
         let payload = [
-            0x0E, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0xDE, 0xAD, 0xBE, 0xEF,
+            0x0E, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF,
         ];
         let req = Request::parse(&payload).unwrap();
         assert_eq!(req.oem_specific, Some(0xDEADBEEF));
@@ -293,7 +317,10 @@ mod tests {
     fn validate_bad_activation_type() {
         let payload = [0x0E, 0x80, 0x99, 0x00, 0x00, 0x00, 0x00];
         let req = Request::parse(&payload).unwrap();
-        assert_eq!(req.validate(), Some(ResponseCode::UnsupportedActivationType));
+        assert_eq!(
+            req.validate(),
+            Some(ResponseCode::UnsupportedActivationType)
+        );
     }
 
     #[test]
@@ -333,10 +360,7 @@ mod tests {
 
     #[test]
     fn parse_success_response() {
-        let payload = [
-            0x0E, 0x80, 0x10, 0x00, 0x10,
-            0x00, 0x00, 0x00, 0x00,
-        ];
+        let payload = [0x0E, 0x80, 0x10, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00];
         let resp = Response::parse(&payload).unwrap();
         assert!(resp.is_success());
         assert_eq!(resp.tester_address, 0x0E80);
@@ -345,10 +369,7 @@ mod tests {
 
     #[test]
     fn parse_denial_response() {
-        let payload = [
-            0x0E, 0x80, 0x10, 0x00, 0x01,
-            0x00, 0x00, 0x00, 0x00,
-        ];
+        let payload = [0x0E, 0x80, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00];
         let resp = Response::parse(&payload).unwrap();
         assert!(!resp.is_success());
         assert_eq!(resp.response_code, ResponseCode::AllSocketsRegistered);
