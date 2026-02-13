@@ -1,0 +1,17 @@
+# DoIP Server Configuration
+
+[server]
+bind_address = "0.0.0.0"
+tcp_port = 13400
+udp_port = 13400
+max_connections = 10
+
+[vehicle]
+logical_address = 0x1000
+vin = "DOIPSERVER0000001"
+eid = "00:1A:2B:3C:4D:5E"
+gid = "00:00:00:00:00:01"
+
+[timeouts]
+initial_inactivity_ms = 2000
+general_inactivity_ms = 300000
