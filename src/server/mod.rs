@@ -13,9 +13,10 @@ pub use udp_handler::UdpHandler;
 use std::sync::Arc;
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::watch;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
-use crate::uds::{UdsHandler, StubHandler};
+use crate::uds::dummy_handler::DummyEcuHandler;
+use crate::uds::UdsHandler;
 
 pub struct DoipServer<H: UdsHandler + 'static> {
     config: Arc<ServerConfig>,
@@ -25,9 +26,9 @@ pub struct DoipServer<H: UdsHandler + 'static> {
     shutdown_rx: watch::Receiver<bool>,
 }
 
-impl DoipServer<StubHandler> {
+impl DoipServer<DummyEcuHandler> {
     pub fn new(config: ServerConfig) -> Self {
-        Self::with_handler(config, StubHandler)
+        Self::with_handler(config, DummyEcuHandler::new())
     }
 }
 
