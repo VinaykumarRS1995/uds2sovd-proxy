@@ -47,7 +47,11 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PayloadTooShort { expected, actual } => {
-                write!(f, "payload too short: need {} bytes, got {}", expected, actual)
+                write!(
+                    f,
+                    "payload too short: need {} bytes, got {}",
+                    expected, actual
+                )
             }
             Self::EmptyUserData => write!(f, "diagnostic message has no user data"),
         }
@@ -271,8 +275,7 @@ impl NegativeAck {
 
         let source_address = u16::from_be_bytes([payload[0], payload[1]]);
         let target_address = u16::from_be_bytes([payload[2], payload[3]]);
-        let nack_code = NackCode::from_u8(payload[4])
-            .unwrap_or(NackCode::TransportProtocolError);
+        let nack_code = NackCode::from_u8(payload[4]).unwrap_or(NackCode::TransportProtocolError);
 
         let previous_data = if payload.len() > Self::MIN_LEN {
             Some(Bytes::copy_from_slice(&payload[5..]))
