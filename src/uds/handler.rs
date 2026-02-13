@@ -6,25 +6,46 @@
 
 use bytes::Bytes;
 
+/// UDS Service IDs (ISO 14229-1)
+pub mod service_id {
+    pub const DIAGNOSTIC_SESSION_CONTROL: u8 = 0x10;
+    pub const ECU_RESET: u8 = 0x11;
+    pub const SECURITY_ACCESS: u8 = 0x27;
+    pub const COMMUNICATION_CONTROL: u8 = 0x28;
+    pub const TESTER_PRESENT: u8 = 0x3E;
+    pub const CONTROL_DTC_SETTING: u8 = 0x85;
+    pub const READ_DATA_BY_IDENTIFIER: u8 = 0x22;
+    pub const WRITE_DATA_BY_IDENTIFIER: u8 = 0x2E;
+    pub const ROUTINE_CONTROL: u8 = 0x31;
+    pub const REQUEST_DOWNLOAD: u8 = 0x34;
+    pub const REQUEST_UPLOAD: u8 = 0x35;
+    pub const TRANSFER_DATA: u8 = 0x36;
+    pub const REQUEST_TRANSFER_EXIT: u8 = 0x37;
+    pub const READ_DTC_INFORMATION: u8 = 0x19;
+    pub const CLEAR_DTC_INFORMATION: u8 = 0x14;
+}
+
 /// UDS request extracted from DoIP diagnostic message
 #[derive(Debug, Clone)]
 pub struct UdsRequest {
     pub source_address: u16,
     pub target_address: u16,
-    pub data: Bytes,
+    pub payload: Bytes,
 }
 
 impl UdsRequest {
-    pub fn new(source: u16, target: u16, data: Bytes) -> Self {
+    pub fn new(source: u16, target: u16, payload: Bytes) -> Self {
         Self {
             source_address: source,
             target_address: target,
-            data,
+            payload,
         }
     }
 
+    /// Returns the UDS Service ID, which is the first byte of the UDS payload
+    /// per ISO 14229-1 (UDS). None is returned for empty payloads.
     pub fn service_id(&self) -> Option<u8> {
-        self.data.first().copied()
+        self.payload.first().copied()
     }
 }
 
@@ -33,15 +54,15 @@ impl UdsRequest {
 pub struct UdsResponse {
     pub source_address: u16,
     pub target_address: u16,
-    pub data: Bytes,
+    pub payload: Bytes,
 }
 
 impl UdsResponse {
-    pub fn new(source: u16, target: u16, data: Bytes) -> Self {
+    pub fn new(source: u16, target: u16, payload: Bytes) -> Self {
         Self {
             source_address: source,
             target_address: target,
-            data,
+            payload,
         }
     }
 }
@@ -54,68 +75,10 @@ pub trait UdsHandler: Send + Sync {
     fn handle(&self, request: UdsRequest) -> UdsResponse;
 }
 
-/// Stub handler that returns NRC 0x11 (Service Not Supported) for all requests
-#[derive(Debug, Default, Clone)]
-pub struct StubHandler;
-
-impl UdsHandler for StubHandler {
-    fn handle(&self, request: UdsRequest) -> UdsResponse {
-        let sid = request.service_id().unwrap_or(0);
-        // Negative response: 0x7F + SID + NRC
-        let nrc_service_not_supported = 0x11;
-        let data = Bytes::from(vec![0x7F, sid, nrc_service_not_supported]);
-
-        UdsResponse::new(
-            request.target_address,
-            request.source_address,
-            data,
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn stub_handler_returns_nrc() {
-        let handler = StubHandler;
-        let request = UdsRequest::new(
-            0x0E00,
-            0x1000,
-            Bytes::from(vec![0x22, 0xF1, 0x90]), // ReadDataByIdentifier
-        );
-
-        let response = handler.handle(request);
-
-        assert_eq!(response.source_address, 0x1000);
-        assert_eq!(response.target_address, 0x0E00);
-        assert_eq!(response.data.as_ref(), &[0x7F, 0x22, 0x11]);
-    }
-
-    #[test]
-    fn stub_handler_handles_empty_request() {
-        let handler = StubHandler;
-        let request = UdsRequest::new(0x0E00, 0x1000, Bytes::new());
-
-        let response = handler.handle(request);
-
-        assert_eq!(response.data.as_ref(), &[0x7F, 0x00, 0x11]);
-    }
-
-    #[test]
-    fn stub_handler_tester_present() {
-        let handler = StubHandler;
-        let request = UdsRequest::new(
-            0x0E00,
-            0x1000,
-            Bytes::from(vec![0x3E, 0x00]), // TesterPresent
-        );
-
-        let response = handler.handle(request);
-
-        assert_eq!(response.data.as_ref(), &[0x7F, 0x3E, 0x11]);
-    }
+    use bytes::Bytes;
 
     #[test]
     fn uds_request_service_id() {
@@ -124,5 +87,15 @@ mod tests {
 
         let empty = UdsRequest::new(0x0E00, 0x1000, Bytes::new());
         assert_eq!(empty.service_id(), None);
+    }
+
+    #[test]
+    fn uds_response_new_sets_payload() {
+        let payload = Bytes::from(vec![0x62, 0x01]);
+        let response = UdsResponse::new(0x1000, 0x0E00, payload.clone());
+
+        assert_eq!(response.source_address, 0x1000);
+        assert_eq!(response.target_address, 0x0E00);
+        assert_eq!(response.payload, payload);
     }
 }
