@@ -3,6 +3,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -154,25 +155,49 @@ impl DoipHeader {
     }
 
     pub fn validate(&self) -> Option<GenericNackCode> {
-        if self.version != DEFAULT_PROTOCOL_VERSION {
+        debug!(
+            "Validating DoIP header: version=0x{:02X}, inverse=0x{:02X}, type=0x{:04X}, len={}",
+            self.version, self.inverse_version, self.payload_type, self.payload_length
+        );
+
+        // Accept DoIP protocol versions 0x01, 0x02, 0x03 (and 0xFF for default/any)
+        // ISO 13400-2:2012 uses 0x02, ISO 13400-2:2019 uses 0x03
+        let valid_version = matches!(self.version, 0x01 | 0x02 | 0x03 | 0xFF);
+        if !valid_version {
+            warn!("Invalid DoIP version: 0x{:02X}", self.version);
             return Some(GenericNackCode::IncorrectPatternFormat);
         }
-        if self.inverse_version != DEFAULT_PROTOCOL_VERSION_INV {
-            return Some(GenericNackCode::IncorrectPatternFormat);
-        }
+
+        // Check version ^ inverse_version == 0xFF
         if self.version ^ self.inverse_version != 0xFF {
+            warn!(
+                "Version/inverse mismatch: 0x{:02X} ^ 0x{:02X} = 0x{:02X} (expected 0xFF)",
+                self.version,
+                self.inverse_version,
+                self.version ^ self.inverse_version
+            );
             return Some(GenericNackCode::IncorrectPatternFormat);
         }
 
         let payload_type = match PayloadType::from_u16(self.payload_type) {
             Some(pt) => pt,
-            None => return Some(GenericNackCode::UnknownPayloadType),
+            None => {
+                warn!("Unknown payload type: 0x{:04X}", self.payload_type);
+                return Some(GenericNackCode::UnknownPayloadType);
+            }
         };
 
         if self.payload_length > MAX_DOIP_MESSAGE_SIZE {
+            warn!("Message too large: {} bytes", self.payload_length);
             return Some(GenericNackCode::MessageTooLarge);
         }
         if (self.payload_length as usize) < payload_type.min_payload_length() {
+            warn!(
+                "Payload too short for {:?}: {} < {}",
+                payload_type,
+                self.payload_length,
+                payload_type.min_payload_length()
+            );
             return Some(GenericNackCode::InvalidPayloadLength);
         }
         None
@@ -239,6 +264,20 @@ impl DoipMessage {
             header: DoipHeader {
                 version: DEFAULT_PROTOCOL_VERSION,
                 inverse_version: DEFAULT_PROTOCOL_VERSION_INV,
+                payload_type: payload_type as u16,
+                payload_length: payload.len() as u32,
+            },
+            payload,
+        }
+    }
+
+    /// Create a DoIP message with a specific protocol version
+    /// This mirrors the version from the incoming request
+    pub fn with_version(version: u8, payload_type: PayloadType, payload: Bytes) -> Self {
+        Self {
+            header: DoipHeader {
+                version,
+                inverse_version: version ^ 0xFF, // Compute inverse
                 payload_type: payload_type as u16,
                 payload_length: payload.len() as u32,
             },
@@ -324,10 +363,21 @@ impl Decoder for DoipCodec {
                         return Ok(None);
                     }
 
+                    // Log raw bytes for debugging
+                    debug!(
+                        "Received raw header bytes: {:02X?}",
+                        &src[..DOIP_HEADER_LENGTH]
+                    );
+
                     let header = DoipHeader::parse(&src[..DOIP_HEADER_LENGTH])
                         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
                     if let Some(nack_code) = header.validate() {
+                        warn!(
+                            "Header validation failed: {:?} - raw bytes: {:02X?}",
+                            nack_code,
+                            &src[..DOIP_HEADER_LENGTH]
+                        );
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidData,
                             format!("validation failed: {:?}", nack_code),
@@ -419,7 +469,7 @@ mod tests {
         let hdr = DoipHeader::parse(&raw).unwrap();
 
         assert_eq!(hdr.payload_type, 0x8001); // DiagnosticMessage
-        assert_eq!(hdr.payload_length, 7);    // 2+2+3 = SA+TA+UDS
+        assert_eq!(hdr.payload_length, 7); // 2+2+3 = SA+TA+UDS
     }
 
     #[test]
@@ -453,14 +503,17 @@ mod tests {
 
     #[test]
     fn reject_wrong_protocol_version() {
-        // Someone sends version 0x03 - we only support 0x02
+        // Someone sends version 0x04 - we only support 0x01, 0x02, 0x03, 0xFF
         let hdr = DoipHeader {
-            version: 0x03,
-            inverse_version: 0xFC,
+            version: 0x04,
+            inverse_version: 0xFB,
             payload_type: 0x0001,
             payload_length: 0,
         };
-        assert_eq!(hdr.validate(), Some(GenericNackCode::IncorrectPatternFormat));
+        assert_eq!(
+            hdr.validate(),
+            Some(GenericNackCode::IncorrectPatternFormat)
+        );
     }
 
     #[test]
@@ -472,7 +525,10 @@ mod tests {
             payload_type: 0x0001,
             payload_length: 0,
         };
-        assert_eq!(hdr.validate(), Some(GenericNackCode::IncorrectPatternFormat));
+        assert_eq!(
+            hdr.validate(),
+            Some(GenericNackCode::IncorrectPatternFormat)
+        );
     }
 
     #[test]
@@ -508,10 +564,22 @@ mod tests {
 
     #[test]
     fn payload_type_lookup_works() {
-        assert_eq!(PayloadType::from_u16(0x0001), Some(PayloadType::VehicleIdentificationRequest));
-        assert_eq!(PayloadType::from_u16(0x0005), Some(PayloadType::RoutingActivationRequest));
-        assert_eq!(PayloadType::from_u16(0x8001), Some(PayloadType::DiagnosticMessage));
-        assert_eq!(PayloadType::from_u16(0x8002), Some(PayloadType::DiagnosticMessagePositiveAck));
+        assert_eq!(
+            PayloadType::from_u16(0x0001),
+            Some(PayloadType::VehicleIdentificationRequest)
+        );
+        assert_eq!(
+            PayloadType::from_u16(0x0005),
+            Some(PayloadType::RoutingActivationRequest)
+        );
+        assert_eq!(
+            PayloadType::from_u16(0x8001),
+            Some(PayloadType::DiagnosticMessage)
+        );
+        assert_eq!(
+            PayloadType::from_u16(0x8002),
+            Some(PayloadType::DiagnosticMessagePositiveAck)
+        );
     }
 
     #[test]
@@ -526,8 +594,14 @@ mod tests {
     #[test]
     fn minimum_payload_lengths_per_spec() {
         // ISO 13400-2 requirements
-        assert_eq!(PayloadType::VehicleIdentificationRequest.min_payload_length(), 0);
-        assert_eq!(PayloadType::RoutingActivationRequest.min_payload_length(), 7);
+        assert_eq!(
+            PayloadType::VehicleIdentificationRequest.min_payload_length(),
+            0
+        );
+        assert_eq!(
+            PayloadType::RoutingActivationRequest.min_payload_length(),
+            7
+        );
         assert_eq!(PayloadType::DiagnosticMessage.min_payload_length(), 5);
         assert_eq!(PayloadType::AliveCheckResponse.min_payload_length(), 2);
     }
@@ -565,10 +639,7 @@ mod tests {
 
     #[test]
     fn serialize_message_to_wire_format() {
-        let msg = DoipMessage::new(
-            PayloadType::AliveCheckRequest,
-            Bytes::new()
-        );
+        let msg = DoipMessage::new(PayloadType::AliveCheckRequest, Bytes::new());
         let wire = msg.to_bytes();
 
         assert_eq!(wire.len(), 8);
@@ -584,10 +655,8 @@ mod tests {
     fn decode_complete_alive_check_response() {
         let mut codec = DoipCodec::new();
         // AliveCheckResponse with source address 0x0E80
-        let mut buf = BytesMut::from(&[
-            0x02, 0xFD, 0x00, 0x08, 0x00, 0x00, 0x00, 0x02,
-            0x0E, 0x80
-        ][..]);
+        let mut buf =
+            BytesMut::from(&[0x02, 0xFD, 0x00, 0x08, 0x00, 0x00, 0x00, 0x02, 0x0E, 0x80][..]);
 
         let msg = codec.decode(&mut buf).unwrap().unwrap();
         assert_eq!(msg.header.payload_type, 0x0008);
@@ -608,10 +677,8 @@ mod tests {
     fn wait_for_more_data_when_payload_incomplete() {
         let mut codec = DoipCodec::new();
         // Header says 5 bytes payload, but only 2 arrived
-        let mut buf = BytesMut::from(&[
-            0x02, 0xFD, 0x80, 0x01, 0x00, 0x00, 0x00, 0x05,
-            0x0E, 0x80
-        ][..]);
+        let mut buf =
+            BytesMut::from(&[0x02, 0xFD, 0x80, 0x01, 0x00, 0x00, 0x00, 0x05, 0x0E, 0x80][..]);
 
         assert!(codec.decode(&mut buf).unwrap().is_none());
     }
@@ -619,12 +686,14 @@ mod tests {
     #[test]
     fn decode_back_to_back_messages() {
         let mut codec = DoipCodec::new();
-        let mut buf = BytesMut::from(&[
-            // Msg 1: AliveCheckRequest
-            0x02, 0xFD, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00,
-            // Msg 2: AliveCheckResponse
-            0x02, 0xFD, 0x00, 0x08, 0x00, 0x00, 0x00, 0x02, 0x0E, 0x80,
-        ][..]);
+        let mut buf = BytesMut::from(
+            &[
+                // Msg 1: AliveCheckRequest
+                0x02, 0xFD, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00,
+                // Msg 2: AliveCheckResponse
+                0x02, 0xFD, 0x00, 0x08, 0x00, 0x00, 0x00, 0x02, 0x0E, 0x80,
+            ][..],
+        );
 
         let m1 = codec.decode(&mut buf).unwrap().unwrap();
         let m2 = codec.decode(&mut buf).unwrap().unwrap();
@@ -637,10 +706,8 @@ mod tests {
     #[test]
     fn reject_invalid_header_in_stream() {
         let mut codec = DoipCodec::new();
-        // Bad version
-        let mut buf = BytesMut::from(&[
-            0x01, 0xFE, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00
-        ][..]);
+        // Bad version (0x04 is not valid - only 0x01, 0x02, 0x03, 0xFF are accepted)
+        let mut buf = BytesMut::from(&[0x04, 0xFB, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00][..]);
 
         assert!(codec.decode(&mut buf).is_err());
     }
@@ -649,9 +716,7 @@ mod tests {
     fn respect_custom_max_payload_size() {
         let mut codec = DoipCodec::with_max_payload_size(100);
         // Payload length = 101, over our limit
-        let mut buf = BytesMut::from(&[
-            0x02, 0xFD, 0x80, 0x01, 0x00, 0x00, 0x00, 0x65
-        ][..]);
+        let mut buf = BytesMut::from(&[0x02, 0xFD, 0x80, 0x01, 0x00, 0x00, 0x00, 0x65][..]);
 
         assert!(codec.decode(&mut buf).is_err());
     }
@@ -679,7 +744,7 @@ mod tests {
         let mut codec = DoipCodec::new();
         let original = DoipMessage::new(
             PayloadType::DiagnosticMessage,
-            Bytes::from_static(&[0x0E, 0x80, 0x10, 0x01, 0x22, 0xF1, 0x90])
+            Bytes::from_static(&[0x0E, 0x80, 0x10, 0x01, 0x22, 0xF1, 0x90]),
         );
 
         let mut buf = BytesMut::new();
@@ -748,7 +813,10 @@ mod tests {
     #[test]
     fn protocol_version_inverse_relationship() {
         // Version XOR inverse must equal 0xFF (per spec)
-        assert_eq!(DEFAULT_PROTOCOL_VERSION ^ DEFAULT_PROTOCOL_VERSION_INV, 0xFF);
+        assert_eq!(
+            DEFAULT_PROTOCOL_VERSION ^ DEFAULT_PROTOCOL_VERSION_INV,
+            0xFF
+        );
     }
 
     #[test]
