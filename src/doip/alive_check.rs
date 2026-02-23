@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! Alive Check handlers (ISO 13400-2)
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -11,11 +14,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PayloadTooShort { expected, actual } => {
-                write!(
-                    f,
-                    "payload too short: need {} bytes, got {}",
-                    expected, actual
-                )
+                write!(f, "payload too short: need {expected} bytes, got {actual}")
             }
         }
     }
@@ -29,10 +28,15 @@ impl std::error::Error for Error {}
 pub struct Request;
 
 impl Request {
+    /// Parse an Alive Check Request from payload bytes
+    ///
+    /// # Errors
+    /// Currently infallible as the request has no payload
     pub fn parse(_payload: &[u8]) -> Result<Self, Error> {
         Ok(Self)
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> Bytes {
         Bytes::new()
     }
@@ -48,22 +52,29 @@ pub struct Response {
 impl Response {
     pub const LEN: usize = 2;
 
+    #[must_use]
     pub fn new(source_address: u16) -> Self {
         Self { source_address }
     }
 
+    /// Parse an Alive Check Response from payload bytes
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if payload is less than 2 bytes
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::LEN {
-            return Err(Error::PayloadTooShort {
+        let bytes: [u8; 2] = payload
+            .get(..Self::LEN)
+            .and_then(|s| s.try_into().ok())
+            .ok_or(Error::PayloadTooShort {
                 expected: Self::LEN,
                 actual: payload.len(),
-            });
-        }
+            })?;
 
-        let source_address = u16::from_be_bytes([payload[0], payload[1]]);
+        let source_address = u16::from_be_bytes(bytes);
         Ok(Self { source_address })
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> Bytes {
         let mut buf = BytesMut::with_capacity(Self::LEN);
         self.write_to(&mut buf);

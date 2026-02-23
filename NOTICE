@@ -1,0 +1,90 @@
+# Notices for Eclipse DoIP Server
+
+This content is produced and maintained by the Eclipse Foundation.
+
+* Project home: https://projects.eclipse.org/projects/automotive.uprotocol
+
+## Trademarks
+
+Eclipse, and the Eclipse Logo are registered trademarks of the Eclipse Foundation.
+
+## Copyright
+
+All content is the property of the respective authors or their employers.
+For more information regarding authorship of content, please consult the
+listed source code repository logs.
+
+## Declared Project Licenses
+
+This program and the accompanying materials are made available under the
+terms of the Apache License, Version 2.0 which is available at
+https://www.apache.org/licenses/LICENSE-2.0.
+
+SPDX-License-Identifier: Apache-2.0
+
+## Source Code
+
+The project maintains the following source code repositories:
+
+* https://github.com/eclipse-uprotocol/doip-server
+
+## Third-party Content
+
+This project leverages the following third party content:
+
+### Tokio
+* License: MIT
+* Project: https://tokio.rs/
+
+### Serde
+* License: MIT OR Apache-2.0
+* Project: https://serde.rs/
+
+### Tracing
+* License: MIT
+* Project: https://tracing.rs/
+
+### bytes
+* License: MIT
+* Project: https://github.com/tokio-rs/bytes
+
+### thiserror
+* License: MIT OR Apache-2.0
+* Project: https://github.com/dtolnay/thiserror
+
+### anyhow
+* License: MIT OR Apache-2.0
+* Project: https://github.com/dtolnay/anyhow
+
+### parking_lot
+* License: MIT OR Apache-2.0
+* Project: https://github.com/Amanieu/parking_lot
+
+### dashmap
+* License: MIT
+* Project: https://github.com/xacrimon/dashmap
+
+### uuid
+* License: MIT OR Apache-2.0
+* Project: https://github.com/uuid-rs/uuid
+
+### hex
+* License: MIT OR Apache-2.0
+* Project: https://github.com/KokaKiwi/rust-hex
+
+### clap
+* License: MIT OR Apache-2.0
+* Project: https://github.com/clap-rs/clap
+
+### toml
+* License: MIT OR Apache-2.0
+* Project: https://github.com/toml-rs/toml
+
+## Cryptography
+
+Content may contain encryption software. The country in which you are
+currently may have restrictions on the import, possession, and use,
+and/or re-export to another country, of encryption software. BEFORE
+using any encryption software, please check the country's laws,
+regulations and policies concerning the import, possession, or use,
+and re-export of encryption software, to see if this is permitted.

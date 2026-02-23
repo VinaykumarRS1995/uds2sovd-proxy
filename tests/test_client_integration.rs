@@ -1,4 +1,7 @@
-//! DoIP Test Client
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
+//! `DoIP` Test Client
 
 use bytes::{BufMut, BytesMut};
 use std::io::{Read, Write};
@@ -45,7 +48,7 @@ fn test_udp_vehicle_discovery() -> std::io::Result<()> {
     socket.set_read_timeout(Some(Duration::from_secs(3)))?;
 
     let request = build_doip_message(VEHICLE_ID_REQUEST, &[]);
-    let target = format!("{}:{}", HOST, PORT);
+    let target = format!("{HOST}:{PORT}");
 
     println!("Sending: {}", hex_encode(&request));
     socket.send_to(&request, &target)?;
@@ -53,7 +56,7 @@ fn test_udp_vehicle_discovery() -> std::io::Result<()> {
     let mut buf = [0u8; 256];
     match socket.recv_from(&mut buf) {
         Ok((len, addr)) => {
-            println!("Response from {}:", addr);
+            println!("Response from {addr}:");
             println!("  Raw: {}", hex_encode(&buf[..len]));
 
             if let Some((payload_type, _)) = parse_doip_header(&buf[..len]) {
@@ -63,17 +66,17 @@ fn test_udp_vehicle_discovery() -> std::io::Result<()> {
                     let logical_addr = u16::from_be_bytes([buf[25], buf[26]]);
                     let eid = hex_encode(&buf[27..33]);
                     let gid = hex_encode(&buf[33..39]);
-                    println!("  VIN: {}", vin);
-                    println!("  Logical Address: 0x{:04X}", logical_addr);
-                    println!("  EID: {}", eid);
-                    println!("  GID: {}", gid);
+                    println!("  VIN: {vin}");
+                    println!("  Logical Address: 0x{logical_addr:04X}");
+                    println!("  EID: {eid}");
+                    println!("  GID: {gid}");
                 } else {
-                    println!("  Unexpected response type: 0x{:04X}", payload_type);
+                    println!("  Unexpected response type: 0x{payload_type:04X}");
                 }
             }
         }
         Err(e) => {
-            println!("  Status: TIMEOUT ({})", e);
+            println!("  Status: TIMEOUT ({e})");
         }
     }
 
@@ -85,9 +88,9 @@ fn test_tcp_routing_activation() -> std::io::Result<TcpStream> {
     println!("TCP Routing Activation Test");
     println!("{}", "=".repeat(50));
 
-    let mut stream = TcpStream::connect(format!("{}:{}", HOST, PORT))?;
+    let mut stream = TcpStream::connect(format!("{HOST}:{PORT}"))?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    println!("Connected to {}:{}", HOST, PORT);
+    println!("Connected to {HOST}:{PORT}");
 
     // Source address: 0x0E00, Activation type: 0x00, Reserved: 4 bytes
     let payload = [0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
@@ -120,10 +123,10 @@ fn test_tcp_routing_activation() -> std::io::Result<TcpStream> {
             };
 
             let status = if code == 0x10 { "SUCCESS" } else { "FAILED" };
-            println!("  Status: {}", status);
-            println!("  Tester Address: 0x{:04X}", tester_addr);
-            println!("  Entity Address: 0x{:04X}", entity_addr);
-            println!("  Response Code: 0x{:02X} ({})", code, code_str);
+            println!("  Status: {status}");
+            println!("  Tester Address: 0x{tester_addr:04X}");
+            println!("  Entity Address: 0x{entity_addr:04X}");
+            println!("  Response Code: 0x{code:02X} ({code_str})");
         }
     }
 
@@ -154,7 +157,7 @@ fn test_tcp_diagnostic_tester_present(stream: &mut TcpStream) -> std::io::Result
                     let ta = u16::from_be_bytes([buf[10], buf[11]]);
                     let uds = &buf[12..len];
                     println!("  Status: DIAGNOSTIC RESPONSE");
-                    println!("  SA: 0x{:04X}, TA: 0x{:04X}", sa, ta);
+                    println!("  SA: 0x{sa:04X}, TA: 0x{ta:04X}");
                     println!("  UDS Response: {}", hex_encode(uds));
 
                     if !uds.is_empty() {
@@ -173,7 +176,7 @@ fn test_tcp_diagnostic_tester_present(stream: &mut TcpStream) -> std::io::Result
                 println!("  Status: NEGATIVE ACK");
             }
             _ => {
-                println!("  Unexpected response type: 0x{:04X}", payload_type);
+                println!("  Unexpected response type: 0x{payload_type:04X}");
             }
         }
     }
@@ -206,7 +209,7 @@ fn test_tcp_read_data_by_id(stream: &mut TcpStream) -> std::io::Result<()> {
                 if uds[0] == 0x62 && uds.len() >= 20 {
                     // Positive response: 0x62 + DID + Data
                     let vin = String::from_utf8_lossy(&uds[3..20]);
-                    println!("    -> VIN: {}", vin);
+                    println!("    -> VIN: {vin}");
                 } else if uds[0] == 0x7F && uds.len() >= 3 {
                     println!("    -> Negative Response: NRC 0x{:02X}", uds[2]);
                 }
@@ -219,7 +222,7 @@ fn test_tcp_read_data_by_id(stream: &mut TcpStream) -> std::io::Result<()> {
 
 fn hex_encode(data: &[u8]) -> String {
     data.iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<Vec<_>>()
         .join("")
 }
@@ -228,11 +231,11 @@ fn main() {
     println!("\n{}", "#".repeat(50));
     println!("# DoIP Server Test Client (Rust)");
     println!("{}", "#".repeat(50));
-    println!("Target: {}:{}", HOST, PORT);
+    println!("Target: {HOST}:{PORT}");
 
     // Test 1: UDP Discovery
     if let Err(e) = test_udp_vehicle_discovery() {
-        eprintln!("UDP test failed: {}", e);
+        eprintln!("UDP test failed: {e}");
     }
 
     std::thread::sleep(Duration::from_millis(500));
@@ -243,17 +246,17 @@ fn main() {
             std::thread::sleep(Duration::from_millis(300));
 
             if let Err(e) = test_tcp_diagnostic_tester_present(&mut stream) {
-                eprintln!("Diagnostic test failed: {}", e);
+                eprintln!("Diagnostic test failed: {e}");
             }
 
             std::thread::sleep(Duration::from_millis(300));
 
             if let Err(e) = test_tcp_read_data_by_id(&mut stream) {
-                eprintln!("Read VIN test failed: {}", e);
+                eprintln!("Read VIN test failed: {e}");
             }
         }
         Err(e) => {
-            eprintln!("TCP test failed: {}", e);
+            eprintln!("TCP test failed: {e}");
         }
     }
 

@@ -1,0 +1,32 @@
+# Contributors to Eclipse DoIP Server
+
+This file lists significant contributors to the Eclipse DoIP Server project.
+For a complete list of contributors, see the Git commit history.
+
+## Project Leads
+
+* [Your Name] - Initial implementation and architecture
+
+## Committers
+
+* [Your Name] - Core development
+
+## Contributors
+
+The following people have contributed to the project:
+
+<!-- 
+To be added as contributions are made.
+Format:
+* Name <email@example.com> - Description of contribution
+-->
+
+## How to be Added
+
+Contributors are added to this file when they:
+1. Submit a merged pull request
+2. Report significant bugs that are fixed
+3. Contribute documentation improvements
+4. Participate in design discussions
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! Dummy ECU handler for integration testing
 
 use bytes::Bytes;
@@ -5,21 +8,22 @@ use tracing::{debug, info};
 
 use crate::uds::{UdsHandler, UdsRequest, UdsResponse};
 
-/// Dummy ECU Handler - Returns positive responses for DoIP Transmitter integration testing
+/// Dummy ECU Handler - Returns positive responses for `DoIP` Transmitter integration testing
 ///
 /// This handler returns a simple positive response (SID + 0x40) for any diagnostic request.
-/// Used for integration testing with external DoIP Transmitters.
+/// Used for integration testing with external `DoIP` Transmitters.
 #[derive(Debug, Clone, Default)]
 pub struct DummyEcuHandler;
 
 impl DummyEcuHandler {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
 
     /// Build positive response: SID + 0x40 followed by response data
     fn positive_response(sid: u8, data: &[u8]) -> Bytes {
-        let mut resp = vec![sid + 0x40];
+        let mut resp = vec![sid.saturating_add(0x40)];
         resp.extend_from_slice(data);
         Bytes::from(resp)
     }
@@ -40,9 +44,9 @@ impl UdsHandler for DummyEcuHandler {
 
         // Simple positive response: SID + 0x40 (positive response SID)
         // Echo back the sub-function byte if present
-        let response_data = if request.payload.len() > 1 {
+        let response_data = if let Some(&sub_fn) = request.payload.get(1) {
             // Include sub-function byte in response
-            Self::positive_response(sid, &[request.payload[1]])
+            Self::positive_response(sid, &[sub_fn])
         } else {
             // Just the positive response SID
             Self::positive_response(sid, &[])

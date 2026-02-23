@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! Routing Activation handlers (ISO 13400-2)
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -19,6 +22,7 @@ pub enum ResponseCode {
 }
 
 impl ResponseCode {
+    #[must_use]
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
             0x00 => Some(Self::UnknownSourceAddress),
@@ -35,6 +39,7 @@ impl ResponseCode {
         }
     }
 
+    #[must_use]
     pub fn is_success(self) -> bool {
         matches!(
             self,
@@ -53,6 +58,7 @@ pub enum ActivationType {
 }
 
 impl ActivationType {
+    #[must_use]
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
             0x00 => Some(Self::Default),
@@ -73,13 +79,9 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PayloadTooShort { expected, actual } => {
-                write!(
-                    f,
-                    "payload too short: need {} bytes, got {}",
-                    expected, actual
-                )
+                write!(f, "payload too short: need {expected} bytes, got {actual}")
             }
-            Self::UnknownResponseCode(code) => write!(f, "unknown response code: 0x{:02X}", code),
+            Self::UnknownResponseCode(code) => write!(f, "unknown response code: 0x{code:02X}"),
         }
     }
 }
@@ -99,28 +101,27 @@ impl Request {
     pub const MIN_LEN: usize = 7;
     pub const MAX_LEN: usize = 11;
 
+    /// Parse a Routing Activation Request from payload bytes
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if payload is less than 7 bytes
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::MIN_LEN {
-            return Err(Error::PayloadTooShort {
+        let header: [u8; 7] = payload
+            .get(..Self::MIN_LEN)
+            .and_then(|s| s.try_into().ok())
+            .ok_or(Error::PayloadTooShort {
                 expected: Self::MIN_LEN,
                 actual: payload.len(),
-            });
-        }
+            })?;
 
-        let source_address = u16::from_be_bytes([payload[0], payload[1]]);
-        let activation_type = payload[2];
-        let reserved = u32::from_be_bytes([payload[3], payload[4], payload[5], payload[6]]);
+        let source_address = u16::from_be_bytes([header[0], header[1]]);
+        let activation_type = header[2];
+        let reserved = u32::from_be_bytes([header[3], header[4], header[5], header[6]]);
 
-        let oem_specific = if payload.len() >= Self::MAX_LEN {
-            Some(u32::from_be_bytes([
-                payload[7],
-                payload[8],
-                payload[9],
-                payload[10],
-            ]))
-        } else {
-            None
-        };
+        let oem_specific = payload
+            .get(7..Self::MAX_LEN)
+            .and_then(|s| <[u8; 4]>::try_from(s).ok())
+            .map(u32::from_be_bytes);
 
         Ok(Self {
             source_address,
@@ -130,6 +131,11 @@ impl Request {
         })
     }
 
+    /// Parse routing activation request from buffer
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer is too short or contains invalid data.
     pub fn parse_buf(buf: &mut Bytes) -> Result<Self, Error> {
         if buf.len() < Self::MIN_LEN {
             return Err(Error::PayloadTooShort {
@@ -155,10 +161,12 @@ impl Request {
         })
     }
 
+    #[must_use]
     pub fn activation_type_enum(&self) -> Option<ActivationType> {
         ActivationType::from_u8(self.activation_type)
     }
 
+    #[must_use]
     pub fn validate(&self) -> Option<ResponseCode> {
         if ActivationType::from_u8(self.activation_type).is_none() {
             return Some(ResponseCode::UnsupportedActivationType);
@@ -181,6 +189,7 @@ impl Response {
     pub const MIN_LEN: usize = 9;
     pub const MAX_LEN: usize = 13;
 
+    #[must_use]
     pub fn success(tester_address: u16, entity_address: u16) -> Self {
         Self {
             tester_address,
@@ -191,6 +200,7 @@ impl Response {
         }
     }
 
+    #[must_use]
     pub fn denial(tester_address: u16, entity_address: u16, code: ResponseCode) -> Self {
         Self {
             tester_address,
@@ -201,6 +211,7 @@ impl Response {
         }
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> Bytes {
         let len = if self.oem_specific.is_some() {
             Self::MAX_LEN
@@ -222,30 +233,30 @@ impl Response {
         }
     }
 
+    /// Parse a Routing Activation Response from payload bytes
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if payload is less than 9 bytes
+    /// Returns `Error::UnknownResponseCode` if response code is invalid
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::MIN_LEN {
-            return Err(Error::PayloadTooShort {
+        let header: [u8; 9] = payload
+            .get(..Self::MIN_LEN)
+            .and_then(|s| s.try_into().ok())
+            .ok_or(Error::PayloadTooShort {
                 expected: Self::MIN_LEN,
                 actual: payload.len(),
-            });
-        }
+            })?;
 
-        let tester_address = u16::from_be_bytes([payload[0], payload[1]]);
-        let entity_address = u16::from_be_bytes([payload[2], payload[3]]);
+        let tester_address = u16::from_be_bytes([header[0], header[1]]);
+        let entity_address = u16::from_be_bytes([header[2], header[3]]);
         let response_code =
-            ResponseCode::from_u8(payload[4]).ok_or(Error::UnknownResponseCode(payload[4]))?;
-        let reserved = u32::from_be_bytes([payload[5], payload[6], payload[7], payload[8]]);
+            ResponseCode::from_u8(header[4]).ok_or(Error::UnknownResponseCode(header[4]))?;
+        let reserved = u32::from_be_bytes([header[5], header[6], header[7], header[8]]);
 
-        let oem_specific = if payload.len() >= Self::MAX_LEN {
-            Some(u32::from_be_bytes([
-                payload[9],
-                payload[10],
-                payload[11],
-                payload[12],
-            ]))
-        } else {
-            None
-        };
+        let oem_specific = payload
+            .get(9..Self::MAX_LEN)
+            .and_then(|s| <[u8; 4]>::try_from(s).ok())
+            .map(u32::from_be_bytes);
 
         Ok(Self {
             tester_address,
@@ -256,6 +267,7 @@ impl Response {
         })
     }
 
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.response_code.is_success()
     }
@@ -297,7 +309,7 @@ mod tests {
             0x0E, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF,
         ];
         let req = Request::parse(&payload).unwrap();
-        assert_eq!(req.oem_specific, Some(0xDEADBEEF));
+        assert_eq!(req.oem_specific, Some(0xDEAD_BEEF));
     }
 
     #[test]
@@ -351,7 +363,7 @@ mod tests {
     #[test]
     fn serialize_response_with_oem() {
         let mut resp = Response::success(0x0E80, 0x1000);
-        resp.oem_specific = Some(0x12345678);
+        resp.oem_specific = Some(0x1234_5678);
         let bytes = resp.to_bytes();
 
         assert_eq!(bytes.len(), 13);
@@ -386,7 +398,7 @@ mod tests {
     #[test]
     fn roundtrip_response_with_oem() {
         let mut original = Response::denial(0x0F00, 0x2000, ResponseCode::MissingAuthentication);
-        original.oem_specific = Some(0xCAFEBABE);
+        original.oem_specific = Some(0xCAFE_BABE);
         let bytes = original.to_bytes();
         let parsed = Response::parse(&bytes).unwrap();
         assert_eq!(original, parsed);

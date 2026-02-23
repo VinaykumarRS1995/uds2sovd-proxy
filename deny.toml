@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024 Contributors to the Eclipse Foundation
+
+# Cargo deny configuration for dependency auditing
+# https://embarkstudios.github.io/cargo-deny/
+
+[licenses]
+# Allow only permissive licenses compatible with Apache-2.0
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+confidence-threshold = 0.8
+exceptions = []
+
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[sources]
+# Warn on dependencies from unknown registries or git sources
+unknown-registry = "warn"
+unknown-git = "warn"
+
+[sources.allow-org]
+github = []
+
+[advisories]
+version = 2
+ignore = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"

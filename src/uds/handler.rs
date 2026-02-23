@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! UDS Handler Trait
 //!
-//! Defines the interface between DoIP transport and UDS processing.
-//! The DoIP server extracts UDS bytes from DoIP frames and delegates
+//! Defines the interface between `DoIP` transport and UDS processing.
+//! The `DoIP` server extracts UDS bytes from `DoIP` frames and delegates
 //! to the handler. The handler returns UDS response bytes.
 
 use bytes::Bytes;
@@ -25,7 +28,7 @@ pub mod service_id {
     pub const CLEAR_DTC_INFORMATION: u8 = 0x14;
 }
 
-/// UDS request extracted from DoIP diagnostic message
+/// UDS request extracted from `DoIP` diagnostic message
 #[derive(Debug, Clone)]
 pub struct UdsRequest {
     pub source_address: u16,
@@ -34,6 +37,7 @@ pub struct UdsRequest {
 }
 
 impl UdsRequest {
+    #[must_use]
     pub fn new(source: u16, target: u16, payload: Bytes) -> Self {
         Self {
             source_address: source,
@@ -49,7 +53,7 @@ impl UdsRequest {
     }
 }
 
-/// UDS response to be wrapped in DoIP diagnostic message
+/// UDS response to be wrapped in `DoIP` diagnostic message
 #[derive(Debug, Clone)]
 pub struct UdsResponse {
     pub source_address: u16,
@@ -58,6 +62,7 @@ pub struct UdsResponse {
 }
 
 impl UdsResponse {
+    #[must_use]
     pub fn new(source: u16, target: u16, payload: Bytes) -> Self {
         Self {
             source_address: source,
@@ -69,7 +74,7 @@ impl UdsResponse {
 
 /// Trait for handling UDS requests
 ///
-/// Implement this trait to connect the DoIP server to a UDS backend
+/// Implement this trait to connect the `DoIP` server to a UDS backend
 /// (e.g., UDS2SOVD converter, ODX/MDD handler, or ECU simulator)
 pub trait UdsHandler: Send + Sync {
     fn handle(&self, request: UdsRequest) -> UdsResponse;

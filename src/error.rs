@@ -1,12 +1,15 @@
-//! Error Types for DoIP Server (ISO 13400-2 & ISO 14229)
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
+//! Error Types for `DoIP` Server (ISO 13400-2 & ISO 14229)
 
 use std::io;
 use thiserror::Error;
 
-/// Result type alias for DoIP operations
+/// Result type alias for `DoIP` operations
 pub type DoipResult<T> = std::result::Result<T, DoipError>;
 
-/// Main DoIP Error type
+/// Main `DoIP` Error type
 #[derive(Error, Debug)]
 pub enum DoipError {
     #[error("I/O error: {0}")]
@@ -55,6 +58,7 @@ pub enum GenericNackCode {
 }
 
 impl GenericNackCode {
+    #[must_use]
     pub const fn as_u8(self) -> u8 {
         self as u8
     }
@@ -76,9 +80,11 @@ pub enum RoutingActivationCode {
 }
 
 impl RoutingActivationCode {
+    #[must_use]
     pub const fn as_u8(self) -> u8 {
         self as u8
     }
+    #[must_use]
     pub const fn is_success(self) -> bool {
         matches!(
             self,
@@ -101,6 +107,7 @@ pub enum DiagnosticNackCode {
 }
 
 impl DiagnosticNackCode {
+    #[must_use]
     pub const fn as_u8(self) -> u8 {
         self as u8
     }
@@ -127,6 +134,7 @@ pub enum UdsNrc {
 }
 
 impl UdsNrc {
+    #[must_use]
     pub const fn as_u8(self) -> u8 {
         self as u8
     }
@@ -222,7 +230,7 @@ mod tests {
     #[test]
     fn test_doip_error_display_variants() {
         let errors = [
-            DoipError::Io(io::Error::new(io::ErrorKind::Other, "io")),
+            DoipError::Io(io::Error::other("io")),
             DoipError::InvalidConfig("bad config".to_string()),
             DoipError::InvalidProtocolVersion {
                 expected: 0x02,

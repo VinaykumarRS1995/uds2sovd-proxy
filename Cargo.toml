@@ -4,6 +4,23 @@ version = "0.1.0"
 edition = "2021"
 default-run = "doip-server"
 
+[features]
+default = ["test-handlers"]
+# Enable test/stub UDS handlers - required for demo binary, not for production library use
+test-handlers = []
+
+# All dependencies are Apache-2.0 or MIT licensed, compatible with Eclipse Foundation projects:
+# - tokio, tokio-util, futures: MIT
+# - serde, toml: MIT OR Apache-2.0
+# - tracing, tracing-subscriber: MIT
+# - thiserror, anyhow: MIT OR Apache-2.0
+# - bytes: MIT
+# - dashmap: MIT
+# - parking_lot: MIT OR Apache-2.0
+# - uuid, hex: MIT OR Apache-2.0
+# - clap: MIT OR Apache-2.0
+# License information verified via crates.io on 2024-02-17
+
 [dependencies]
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
@@ -31,3 +48,16 @@ parking_lot = "0.12"
 uuid = { version = "1.6", features = ["v4"] }
 hex = "0.4"
 clap = { version = "4.4", features = ["derive"] }
+
+[lints.clippy]
+# Enable pedantic lints (matching CDA standards)
+pedantic = { level = "warn", priority = -1 }
+
+# Exclude some too pedantic lints
+similar_names = "allow"
+
+# Additional strict lints for safety
+clone_on_ref_ptr = "warn"
+indexing_slicing = "deny"
+unwrap_used = "deny"
+arithmetic_side_effects = "deny"

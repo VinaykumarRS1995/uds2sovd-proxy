@@ -1,4 +1,7 @@
-//! DoIP Server - Async Implementation
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
+//! `DoIP` Server - Async Implementation
 
 use clap::Parser;
 use doip_server::server::{DoipServer, ServerConfig};
@@ -78,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
     info!("  VIN: {}", String::from_utf8_lossy(&config.vin));
 
     let server = Arc::new(DoipServer::new(config));
-    let server_handle = server.clone();
+    let server_handle = Arc::clone(&server);
 
     // Spawn signal handler for graceful shutdown
     tokio::spawn(async move {

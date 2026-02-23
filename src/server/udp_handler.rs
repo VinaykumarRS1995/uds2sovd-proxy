@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! UDP handler for vehicle discovery
 
 use std::sync::Arc;
@@ -12,6 +15,7 @@ pub struct UdpHandler {
 }
 
 impl UdpHandler {
+    #[must_use]
     pub fn new(config: Arc<ServerConfig>) -> Self {
         Self { config }
     }
@@ -31,7 +35,12 @@ impl UdpHandler {
 
                     debug!("UDP packet from {}: {} bytes", peer, len);
 
-                    if let Some(response) = self.handle_packet(&buf[..len]) {
+                    let Some(packet_data) = buf.get(..len) else {
+                        debug!("Failed to get packet slice");
+                        continue;
+                    };
+
+                    if let Some(response) = self.handle_packet(packet_data) {
                         let response_bytes = response.to_bytes();
                         if let Err(e) = socket.send_to(&response_bytes, peer).await {
                             warn!("Failed to send UDP response to {}: {}", peer, e);
@@ -58,17 +67,17 @@ impl UdpHandler {
 
         let payload_type = PayloadType::from_u16(header.payload_type)?;
         let payload_start = DOIP_HEADER_LENGTH;
-        let payload_end = payload_start + header.payload_length as usize;
+        let payload_end = payload_start.saturating_add(header.payload_length as usize);
 
         if data.len() < payload_end {
             return None;
         }
 
-        let payload = &data[payload_start..payload_end];
+        let payload = data.get(payload_start..payload_end)?;
 
         match payload_type {
             PayloadType::VehicleIdentificationRequest => {
-                self.handle_vehicle_id_request(payload, version)
+                Some(self.handle_vehicle_id_request(payload, version))
             }
             PayloadType::VehicleIdentificationRequestWithEid => {
                 self.handle_vehicle_id_with_eid(payload, version)
@@ -83,9 +92,9 @@ impl UdpHandler {
         }
     }
 
-    fn handle_vehicle_id_request(&self, _payload: &[u8], version: u8) -> Option<DoipMessage> {
+    fn handle_vehicle_id_request(&self, _payload: &[u8], version: u8) -> DoipMessage {
         info!("Vehicle identification request received");
-        Some(self.build_vehicle_id_response(version))
+        self.build_vehicle_id_response(version)
     }
 
     fn handle_vehicle_id_with_eid(&self, payload: &[u8], version: u8) -> Option<DoipMessage> {

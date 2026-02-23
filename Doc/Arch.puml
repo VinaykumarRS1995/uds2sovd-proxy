@@ -1,0 +1,50 @@
+@startuml
+
+title DoIP Server POC Architecture
+
+rectangle "Client" {
+  (test_client.rs) as tester
+  (main.rs) as main
+}
+
+rectangle "server" {
+  (DoipServer) as server
+  (TcpHandler) as tcp
+  (UdpHandler) as udp
+  (SessionManager) as session
+}
+
+rectangle "doip" {
+  (header_parser) as header
+  (routing_activation) as routing
+  (diagnostic_message) as diag
+  (vehicle_id) as vid
+  (alive_check) as alive
+}
+
+rectangle "uds" {
+  (UdsHandler) as uds
+}
+
+rectangle "config" {
+  (ServerConfig) as cfg
+}
+
+main --> server
+cfg --> server
+tester --> server
+
+server --> tcp
+server --> udp
+tcp --> session
+
+tcp --> header
+udp --> header
+tcp --> routing
+tcp --> diag
+tcp --> alive
+udp --> vid
+
+diag --> uds
+
+@enduml

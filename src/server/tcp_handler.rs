@@ -1,9 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! TCP connection handler
 
 use bytes::Bytes;
 use futures::{SinkExt, StreamExt};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpStream;
+use tokio::time::timeout;
 use tokio_util::codec::Framed;
 use tracing::{debug, error, info, warn};
 
@@ -56,14 +61,29 @@ impl<H: UdsHandler> TcpHandler<H> {
         let mut framed = Framed::new(stream, DoipCodec::new());
 
         'connection_loop: loop {
-            match framed.next().await {
-                Some(Ok(msg)) => {
+            // Determine timeout based on session state (ISO 13400-2):
+            // - T_TCP_Initial (2s): Before routing activation
+            // - T_TCP_General (5min): After routing activation
+            let inactivity_timeout = if self
+                .sessions
+                .get_session(session_id)
+                .is_some_and(|s| s.is_routing_active())
+            {
+                Duration::from_millis(self.config.general_inactivity_timeout_ms)
+            } else {
+                Duration::from_millis(self.config.initial_inactivity_timeout_ms)
+            };
+
+            let recv_result = timeout(inactivity_timeout, framed.next()).await;
+
+            match recv_result {
+                Ok(Some(Ok(msg))) => {
                     debug!("Received message: {:?}", msg.header);
 
                     // Store the incoming protocol version to mirror it in responses
                     let incoming_version = msg.header.version;
 
-                    let result = self.handle_message(session_id, msg, incoming_version).await;
+                    let result = self.handle_message(session_id, &msg, incoming_version);
 
                     match result {
                         HandleResult::None => {}
@@ -88,12 +108,20 @@ impl<H: UdsHandler> TcpHandler<H> {
                         }
                     }
                 }
-                Some(Err(e)) => {
+                Ok(Some(Err(e))) => {
                     warn!("Connection error from {}: {}", peer_addr, e);
                     break 'connection_loop;
                 }
-                None => {
+                Ok(None) => {
                     info!("Connection closed by {}", peer_addr);
+                    break 'connection_loop;
+                }
+                Err(_) => {
+                    // Timeout elapsed - close connection per ISO 13400-2
+                    warn!(
+                        "Inactivity timeout ({:?}) for session {} from {}",
+                        inactivity_timeout, session_id, peer_addr
+                    );
                     break 'connection_loop;
                 }
             }
@@ -103,24 +131,20 @@ impl<H: UdsHandler> TcpHandler<H> {
         info!("Session {} ended", session_id);
     }
 
-    async fn handle_message(&self, session_id: u64, msg: DoipMessage, version: u8) -> HandleResult {
-        let payload_type = match msg.payload_type() {
-            Some(pt) => pt,
-            None => return HandleResult::None,
+    fn handle_message(&self, session_id: u64, msg: &DoipMessage, version: u8) -> HandleResult {
+        let Some(payload_type) = msg.payload_type() else {
+            return HandleResult::None;
         };
 
         match payload_type {
             PayloadType::RoutingActivationRequest => {
-                self.handle_routing_activation(session_id, msg.payload, version)
-                    .await
+                self.handle_routing_activation(session_id, &msg.payload, version)
             }
             PayloadType::DiagnosticMessage => {
-                self.handle_diagnostic_message(session_id, msg.payload, version)
-                    .await
+                self.handle_diagnostic_message(session_id, &msg.payload, version)
             }
             PayloadType::AliveCheckResponse => {
-                self.handle_alive_check_response(session_id, msg.payload)
-                    .await
+                Self::handle_alive_check_response(session_id, &msg.payload)
             }
             _ => {
                 debug!("Unhandled payload type: {:?}", payload_type);
@@ -129,23 +153,18 @@ impl<H: UdsHandler> TcpHandler<H> {
         }
     }
 
-    /// Create a DoIP message with the specified protocol version
-    fn create_message(
-        &self,
-        version: u8,
-        payload_type: PayloadType,
-        payload: Bytes,
-    ) -> DoipMessage {
+    /// Create a `DoIP` message with the specified protocol version
+    fn create_message(version: u8, payload_type: PayloadType, payload: Bytes) -> DoipMessage {
         DoipMessage::with_version(version, payload_type, payload)
     }
 
-    async fn handle_routing_activation(
+    fn handle_routing_activation(
         &self,
         session_id: u64,
-        payload: Bytes,
+        payload: &Bytes,
         version: u8,
     ) -> HandleResult {
-        let request = match routing_activation::Request::parse(&payload) {
+        let request = match routing_activation::Request::parse(payload) {
             Ok(r) => r,
             Err(e) => {
                 warn!("Invalid routing activation request: {}", e);
@@ -160,9 +179,8 @@ impl<H: UdsHandler> TcpHandler<H> {
 
         // Check if tester is already registered on another socket
         let response_code = if self.sessions.is_tester_registered(request.source_address) {
-            let session = match self.sessions.get_session(session_id) {
-                Some(s) => s,
-                None => return HandleResult::None,
+            let Some(session) = self.sessions.get_session(session_id) else {
+                return HandleResult::None;
             };
             if session.tester_address == request.source_address {
                 routing_activation::ResponseCode::SourceAddressAlreadyActive
@@ -192,29 +210,26 @@ impl<H: UdsHandler> TcpHandler<H> {
             response_code, request.source_address
         );
 
-        HandleResult::Single(self.create_message(
+        HandleResult::Single(Self::create_message(
             version,
             PayloadType::RoutingActivationResponse,
             response.to_bytes(),
         ))
     }
 
-    async fn handle_diagnostic_message(
+    fn handle_diagnostic_message(
         &self,
         session_id: u64,
-        payload: Bytes,
+        payload: &Bytes,
         version: u8,
     ) -> HandleResult {
-        let session = match self.sessions.get_session(session_id) {
-            Some(s) => s,
-            None => {
-                warn!("Session not found for diagnostic message");
-                return self.build_diag_nack(
-                    0,
-                    diagnostic_message::NackCode::InvalidSourceAddress,
-                    version,
-                );
-            }
+        let Some(session) = self.sessions.get_session(session_id) else {
+            warn!("Session not found for diagnostic message");
+            return self.build_diag_nack(
+                0,
+                diagnostic_message::NackCode::InvalidSourceAddress,
+                version,
+            );
         };
 
         // Check routing is active
@@ -227,7 +242,7 @@ impl<H: UdsHandler> TcpHandler<H> {
             );
         }
 
-        let msg = match diagnostic_message::Message::parse(&payload) {
+        let msg = match diagnostic_message::Message::parse(payload) {
             Ok(m) => m,
             Err(e) => {
                 warn!("Invalid diagnostic message: {}", e);
@@ -252,7 +267,7 @@ impl<H: UdsHandler> TcpHandler<H> {
             self.config.logical_address, // Server address as source
             msg.source_address,          // Client address as target (swapped)
         );
-        let ack_msg = self.create_message(
+        let ack_msg = Self::create_message(
             version,
             PayloadType::DiagnosticMessagePositiveAck,
             ack.to_bytes(),
@@ -274,7 +289,7 @@ impl<H: UdsHandler> TcpHandler<H> {
             msg.source_address,          // Client address as target (swapped)
             uds_response.payload,
         );
-        let response_msg = self.create_message(
+        let response_msg = Self::create_message(
             version,
             PayloadType::DiagnosticMessage,
             diag_response.to_bytes(),
@@ -293,15 +308,15 @@ impl<H: UdsHandler> TcpHandler<H> {
     ) -> HandleResult {
         let nack =
             diagnostic_message::NegativeAck::new(self.config.logical_address, tester_address, code);
-        HandleResult::Single(self.create_message(
+        HandleResult::Single(Self::create_message(
             version,
             PayloadType::DiagnosticMessageNegativeAck,
             nack.to_bytes(),
         ))
     }
 
-    async fn handle_alive_check_response(&self, session_id: u64, payload: Bytes) -> HandleResult {
-        let response = match alive_check::Response::parse(&payload) {
+    fn handle_alive_check_response(session_id: u64, payload: &Bytes) -> HandleResult {
+        let response = match alive_check::Response::parse(payload) {
             Ok(r) => r,
             Err(e) => {
                 warn!("Invalid alive check response: {}", e);
@@ -362,9 +377,7 @@ mod tests {
         let session_id = create_session(&sessions);
 
         let payload = routing_activation_payload(0x0E00);
-        let result = handler
-            .handle_routing_activation(session_id, payload, 0x02)
-            .await;
+        let result = handler.handle_routing_activation(session_id, &payload, 0x02);
 
         match result {
             HandleResult::Single(msg) => {
@@ -399,9 +412,7 @@ mod tests {
         let uds_payload = Bytes::from(vec![0x10, 0x01]);
         let diag = diagnostic_message::Message::new(0x0E00, config.logical_address, uds_payload);
 
-        let result = handler
-            .handle_diagnostic_message(session_id, diag.to_bytes(), 0x03)
-            .await;
+        let result = handler.handle_diagnostic_message(session_id, &diag.to_bytes(), 0x03);
 
         match result {
             HandleResult::Single(msg) => {
@@ -434,9 +445,7 @@ mod tests {
         let uds_payload = Bytes::from(vec![0x10, 0x02]);
         let diag = diagnostic_message::Message::new(0x0E00, config.logical_address, uds_payload);
 
-        let result = handler
-            .handle_diagnostic_message(session_id, diag.to_bytes(), 0x02)
-            .await;
+        let result = handler.handle_diagnostic_message(session_id, &diag.to_bytes(), 0x02);
 
         match result {
             HandleResult::Multiple(msgs) => {

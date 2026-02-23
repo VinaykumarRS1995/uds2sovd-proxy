@@ -1,6 +1,5 @@
 # Build artifacts
 /target/
-target/
 
 # Cargo lock (optional - some projects include it)
 Cargo.lock
@@ -10,9 +9,6 @@ Cargo.lock
 .idea/
 *.swp
 *.swo
-
-
-# Debug
 *.pdb
 
 # Environment

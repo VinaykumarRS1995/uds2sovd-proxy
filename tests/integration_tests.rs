@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! Integration tests for DoIP Server
 
 use std::net::SocketAddr;
@@ -40,9 +43,11 @@ mod tcp_tests {
     use std::sync::Arc;
 
     async fn start_test_server(port: u16) -> Arc<DoipServer<DummyEcuHandler>> {
-        let mut config = ServerConfig::default();
-        config.tcp_addr = format!("127.0.0.1:{}", port).parse().unwrap();
-        config.udp_addr = format!("127.0.0.1:{}", port).parse().unwrap();
+        let config = ServerConfig {
+            tcp_addr: format!("127.0.0.1:{port}").parse().unwrap(),
+            udp_addr: format!("127.0.0.1:{port}").parse().unwrap(),
+            ..Default::default()
+        };
 
         let server = Arc::new(DoipServer::new(config));
         let server_clone = server.clone();
@@ -62,7 +67,7 @@ mod tcp_tests {
 
         let mut stream = timeout(
             TEST_TIMEOUT,
-            TcpStream::connect(format!("127.0.0.1:{}", port)),
+            TcpStream::connect(format!("127.0.0.1:{port}")),
         )
         .await
         .expect("connect timeout")
@@ -99,7 +104,7 @@ mod tcp_tests {
 
         let mut stream = timeout(
             TEST_TIMEOUT,
-            TcpStream::connect(format!("127.0.0.1:{}", port)),
+            TcpStream::connect(format!("127.0.0.1:{port}")),
         )
         .await
         .expect("connect timeout")
@@ -122,8 +127,7 @@ mod tcp_tests {
         // Should get NACK because routing not activated
         assert!(
             payload_type == 0x8003 || payload_type == 0x0000,
-            "expected NACK or generic NACK, got 0x{:04X}",
-            payload_type
+            "expected NACK or generic NACK, got 0x{payload_type:04X}"
         );
 
         server.shutdown();
@@ -136,7 +140,7 @@ mod tcp_tests {
 
         let mut stream = timeout(
             TEST_TIMEOUT,
-            TcpStream::connect(format!("127.0.0.1:{}", port)),
+            TcpStream::connect(format!("127.0.0.1:{port}")),
         )
         .await
         .expect("connect timeout")
@@ -172,8 +176,7 @@ mod tcp_tests {
         // Should get diagnostic response (positive ack or diagnostic message)
         assert!(
             payload_type == 0x8001 || payload_type == 0x8002,
-            "expected diagnostic response, got 0x{:04X}",
-            payload_type
+            "expected diagnostic response, got 0x{payload_type:04X}"
         );
 
         server.shutdown();
@@ -187,9 +190,11 @@ mod udp_tests {
     use std::sync::Arc;
 
     async fn start_test_server(port: u16) -> Arc<DoipServer<DummyEcuHandler>> {
-        let mut config = ServerConfig::default();
-        config.tcp_addr = format!("127.0.0.1:{}", port).parse().unwrap();
-        config.udp_addr = format!("127.0.0.1:{}", port).parse().unwrap();
+        let config = ServerConfig {
+            tcp_addr: format!("127.0.0.1:{port}").parse().unwrap(),
+            udp_addr: format!("127.0.0.1:{port}").parse().unwrap(),
+            ..Default::default()
+        };
 
         let server = Arc::new(DoipServer::new(config));
         let server_clone = server.clone();
@@ -208,7 +213,7 @@ mod udp_tests {
         let server = start_test_server(port).await;
 
         let socket = UdpSocket::bind("127.0.0.1:0").await.expect("bind failed");
-        let server_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+        let server_addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
 
         // Send vehicle identification request (payload type 0x0001, empty payload)
         let request = build_doip_message(0x0001, &[]);
@@ -243,7 +248,7 @@ mod udp_tests {
         let server = start_test_server(port).await;
 
         let socket = UdpSocket::bind("127.0.0.1:0").await.expect("bind failed");
-        let server_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+        let server_addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
 
         // Send vehicle ID request with EID (matching server's EID)
         let eid = [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E];

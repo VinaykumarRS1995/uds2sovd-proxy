@@ -1,4 +1,7 @@
-//! DoIP Server Configuration
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
+//! `DoIP` Server Configuration
 
 use serde::Deserialize;
 use std::net::SocketAddr;
@@ -8,13 +11,13 @@ use std::path::Path;
 // Default Configuration Constants (per ISO 13400-2 DoIP specification)
 // ============================================================================
 
-/// Default DoIP port for both TCP and UDP as defined in ISO 13400-2
+/// Default `DoIP` port for both TCP and UDP as defined in ISO 13400-2
 const DEFAULT_DOIP_PORT: u16 = 13400;
 
 /// Default bind address - listen on all network interfaces
 const DEFAULT_BIND_ADDRESS: &str = "0.0.0.0";
 
-/// Default ECU logical address (DoIP entity address)
+/// Default ECU logical address (`DoIP` entity address)
 const DEFAULT_LOGICAL_ADDRESS: u16 = 0x0091;
 
 /// Default Vehicle Identification Number (17 ASCII characters per ISO 3779)
@@ -29,10 +32,10 @@ const DEFAULT_GID: [u8; 6] = [0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54];
 /// Maximum concurrent TCP connections allowed
 const DEFAULT_MAX_CONNECTIONS: usize = 10;
 
-/// Initial inactivity timeout in milliseconds (T_TCP_Initial per ISO 13400-2: 2 seconds)
+/// Initial inactivity timeout in milliseconds (`T_TCP_Initial` per ISO 13400-2: 2 seconds)
 const DEFAULT_INITIAL_INACTIVITY_TIMEOUT_MS: u64 = 2_000;
 
-/// General inactivity timeout in milliseconds (T_TCP_General per ISO 13400-2: 5 minutes)
+/// General inactivity timeout in milliseconds (`T_TCP_General` per ISO 13400-2: 5 minutes)
 const DEFAULT_GENERAL_INACTIVITY_TIMEOUT_MS: u64 = 300_000;
 
 #[derive(Debug, Clone)]
@@ -94,6 +97,7 @@ struct TimeoutSection {
 }
 
 impl ServerConfig {
+    #[must_use]
     pub fn new(logical_address: u16) -> Self {
         Self {
             logical_address,
@@ -101,6 +105,10 @@ impl ServerConfig {
         }
     }
 
+    /// Load configuration from TOML file
+    ///
+    /// # Errors
+    /// Returns error if file cannot be read, parsed, or contains invalid values
     pub fn from_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let file: ConfigFile = toml::from_str(&content)?;
@@ -115,8 +123,8 @@ impl ServerConfig {
             let tcp_port = server.tcp_port.unwrap_or(DEFAULT_DOIP_PORT);
             let udp_port = server.udp_port.unwrap_or(DEFAULT_DOIP_PORT);
 
-            config.tcp_addr = format!("{}:{}", bind, tcp_port).parse()?;
-            config.udp_addr = format!("{}:{}", bind, udp_port).parse()?;
+            config.tcp_addr = format!("{bind}:{tcp_port}").parse()?;
+            config.udp_addr = format!("{bind}:{udp_port}").parse()?;
 
             if let Some(max) = server.max_connections {
                 config.max_connections = max;
@@ -171,11 +179,13 @@ impl ServerConfig {
         Ok(arr)
     }
 
+    #[must_use]
     pub fn with_vin(mut self, vin: [u8; 17]) -> Self {
         self.vin = vin;
         self
     }
 
+    #[must_use]
     pub fn with_addresses(mut self, tcp: SocketAddr, udp: SocketAddr) -> Self {
         self.tcp_addr = tcp;
         self.udp_addr = udp;

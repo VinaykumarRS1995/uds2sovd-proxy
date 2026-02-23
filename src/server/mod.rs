@@ -1,4 +1,7 @@
-//! DoIP Server
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
+//! `DoIP` Server
 
 mod config;
 mod session;
@@ -15,6 +18,7 @@ use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::watch;
 use tracing::{error, info, warn};
 
+#[cfg(any(test, feature = "test-handlers"))]
 use crate::uds::dummy_handler::DummyEcuHandler;
 use crate::uds::UdsHandler;
 
@@ -26,7 +30,13 @@ pub struct DoipServer<H: UdsHandler + 'static> {
     shutdown_rx: watch::Receiver<bool>,
 }
 
+/// Convenience constructor using `DummyEcuHandler`.
+///
+/// Only available with the `test-handlers` feature or in tests.
+/// For production, use `DoipServer::with_handler()` with a real UDS handler.
+#[cfg(any(test, feature = "test-handlers"))]
 impl DoipServer<DummyEcuHandler> {
+    #[must_use]
     pub fn new(config: ServerConfig) -> Self {
         Self::with_handler(config, DummyEcuHandler::new())
     }
@@ -48,6 +58,11 @@ impl<H: UdsHandler + 'static> DoipServer<H> {
         let _ = self.shutdown_tx.send(true);
     }
 
+    /// Run the `DoIP` server
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if socket binding fails or other I/O errors occur.
     pub async fn run(&self) -> anyhow::Result<()> {
         info!("Starting DoIP server");
         info!("  Logical address: 0x{:04X}", self.config.logical_address);
@@ -62,11 +77,11 @@ impl<H: UdsHandler + 'static> DoipServer<H> {
         info!("TCP listener bound to {}", self.config.tcp_addr);
 
         // Spawn UDP handler
-        let udp_handler = UdpHandler::new(self.config.clone());
+        let udp_handler = UdpHandler::new(Arc::clone(&self.config));
         let mut udp_shutdown = self.shutdown_rx.clone();
         tokio::spawn(async move {
             tokio::select! {
-                _ = udp_handler.run(udp_socket) => {}
+                () = udp_handler.run(udp_socket) => {}
                 _ = udp_shutdown.changed() => {
                     info!("UDP handler shutting down");
                 }
@@ -80,11 +95,21 @@ impl<H: UdsHandler + 'static> DoipServer<H> {
                 result = tcp_listener.accept() => {
                     match result {
                         Ok((stream, peer_addr)) => {
+                            // Enforce max_connections limit (DoS protection per ISO 13400-2)
+                            if self.sessions.session_count() >= self.config.max_connections {
+                                warn!(
+                                    "Connection rejected from {}: max_connections ({}) reached",
+                                    peer_addr, self.config.max_connections
+                                );
+                                drop(stream);
+                                continue;
+                            }
+
                             info!("New TCP connection from {}", peer_addr);
                             let handler = TcpHandler::new(
-                                self.config.clone(),
-                                self.sessions.clone(),
-                                self.uds_handler.clone(),
+                                Arc::clone(&self.config),
+                                Arc::clone(&self.sessions),
+                                Arc::clone(&self.uds_handler),
                             );
                             tokio::spawn(async move {
                                 handler.handle_connection(stream).await;

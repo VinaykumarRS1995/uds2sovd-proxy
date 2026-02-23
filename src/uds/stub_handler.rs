@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! Stub UDS handler for testing utilities
 
 use bytes::Bytes;
@@ -15,11 +18,13 @@ pub struct StubHandler {
 
 impl StubHandler {
     /// Create a stub handler that always returns the given NRC.
+    #[must_use]
     pub fn new(nrc: u8) -> Self {
         Self { nrc }
     }
 
     /// Create a stub handler that returns NRC 0x11 (Service Not Supported).
+    #[must_use]
     pub fn service_not_supported() -> Self {
         Self::new(0x11)
     }

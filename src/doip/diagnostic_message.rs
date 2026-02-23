@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! Diagnostic Message handlers (ISO 13400-2)
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -23,6 +26,7 @@ pub enum NackCode {
 }
 
 impl NackCode {
+    #[must_use]
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
             0x02 => Some(Self::InvalidSourceAddress),
@@ -47,11 +51,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PayloadTooShort { expected, actual } => {
-                write!(
-                    f,
-                    "payload too short: need {} bytes, got {}",
-                    expected, actual
-                )
+                write!(f, "payload too short: need {expected} bytes, got {actual}")
             }
             Self::EmptyUserData => write!(f, "diagnostic message has no user data"),
         }
@@ -72,6 +72,7 @@ pub struct Message {
 impl Message {
     pub const MIN_LEN: usize = 5; // SA + TA + at least 1 byte UDS
 
+    #[must_use]
     pub fn new(source: u16, target: u16, data: Bytes) -> Self {
         Self {
             source_address: source,
@@ -80,17 +81,32 @@ impl Message {
         }
     }
 
+    /// Parse a Diagnostic Message from payload bytes
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if payload is less than 5 bytes
+    /// Returns `Error::EmptyUserData` if no UDS data is present
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::MIN_LEN {
-            return Err(Error::PayloadTooShort {
-                expected: Self::MIN_LEN,
-                actual: payload.len(),
-            });
-        }
+        let header: [u8; 4] =
+            payload
+                .get(..4)
+                .and_then(|s| s.try_into().ok())
+                .ok_or(Error::PayloadTooShort {
+                    expected: Self::MIN_LEN,
+                    actual: payload.len(),
+                })?;
 
-        let source_address = u16::from_be_bytes([payload[0], payload[1]]);
-        let target_address = u16::from_be_bytes([payload[2], payload[3]]);
-        let user_data = Bytes::copy_from_slice(&payload[4..]);
+        let source_address = u16::from_be_bytes([header[0], header[1]]);
+        let target_address = u16::from_be_bytes([header[2], header[3]]);
+
+        let user_data =
+            payload
+                .get(4..)
+                .map(Bytes::copy_from_slice)
+                .ok_or(Error::PayloadTooShort {
+                    expected: Self::MIN_LEN,
+                    actual: payload.len(),
+                })?;
 
         if user_data.is_empty() {
             return Err(Error::EmptyUserData);
@@ -103,6 +119,11 @@ impl Message {
         })
     }
 
+    /// Parse a Diagnostic Message from a mutable Bytes buffer
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if buffer is less than 5 bytes
+    /// Returns `Error::EmptyUserData` if no UDS data is present
     pub fn parse_buf(buf: &mut Bytes) -> Result<Self, Error> {
         if buf.len() < Self::MIN_LEN {
             return Err(Error::PayloadTooShort {
@@ -126,8 +147,9 @@ impl Message {
         })
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> Bytes {
-        let mut buf = BytesMut::with_capacity(4 + self.user_data.len());
+        let mut buf = BytesMut::with_capacity(4_usize.saturating_add(self.user_data.len()));
         self.write_to(&mut buf);
         buf.freeze()
     }
@@ -157,6 +179,7 @@ pub struct PositiveAck {
 impl PositiveAck {
     pub const MIN_LEN: usize = 5;
 
+    #[must_use]
     pub fn new(source: u16, target: u16) -> Self {
         Self {
             source_address: source,
@@ -166,6 +189,7 @@ impl PositiveAck {
         }
     }
 
+    #[must_use]
     pub fn with_previous_data(source: u16, target: u16, data: Bytes) -> Self {
         Self {
             source_address: source,
@@ -175,9 +199,10 @@ impl PositiveAck {
         }
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> Bytes {
-        let extra = self.previous_data.as_ref().map(|d| d.len()).unwrap_or(0);
-        let mut buf = BytesMut::with_capacity(Self::MIN_LEN + extra);
+        let extra = self.previous_data.as_ref().map_or(0, Bytes::len);
+        let mut buf = BytesMut::with_capacity(Self::MIN_LEN.saturating_add(extra));
         self.write_to(&mut buf);
         buf.freeze()
     }
@@ -191,7 +216,21 @@ impl PositiveAck {
         }
     }
 
+    /// Parse a Positive Ack from payload bytes
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if payload is less than 5 bytes
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
+        let header: [u8; 4] =
+            payload
+                .get(..4)
+                .and_then(|s| s.try_into().ok())
+                .ok_or(Error::PayloadTooShort {
+                    expected: Self::MIN_LEN,
+                    actual: payload.len(),
+                })?;
+
+        // Verify we have at least MIN_LEN bytes
         if payload.len() < Self::MIN_LEN {
             return Err(Error::PayloadTooShort {
                 expected: Self::MIN_LEN,
@@ -199,15 +238,14 @@ impl PositiveAck {
             });
         }
 
-        let source_address = u16::from_be_bytes([payload[0], payload[1]]);
-        let target_address = u16::from_be_bytes([payload[2], payload[3]]);
+        let source_address = u16::from_be_bytes([header[0], header[1]]);
+        let target_address = u16::from_be_bytes([header[2], header[3]]);
         let ack_code = AckCode::Acknowledged; // only one value
 
-        let previous_data = if payload.len() > Self::MIN_LEN {
-            Some(Bytes::copy_from_slice(&payload[5..]))
-        } else {
-            None
-        };
+        let previous_data = payload
+            .get(5..)
+            .filter(|d| !d.is_empty())
+            .map(Bytes::copy_from_slice);
 
         Ok(Self {
             source_address,
@@ -231,6 +269,7 @@ pub struct NegativeAck {
 impl NegativeAck {
     pub const MIN_LEN: usize = 5;
 
+    #[must_use]
     pub fn new(source: u16, target: u16, code: NackCode) -> Self {
         Self {
             source_address: source,
@@ -249,9 +288,11 @@ impl NegativeAck {
         }
     }
 
+    /// Serialize to bytes
+    #[must_use]
     pub fn to_bytes(&self) -> Bytes {
-        let extra = self.previous_data.as_ref().map(|d| d.len()).unwrap_or(0);
-        let mut buf = BytesMut::with_capacity(Self::MIN_LEN + extra);
+        let extra = self.previous_data.as_ref().map_or(0, Bytes::len);
+        let mut buf = BytesMut::with_capacity(Self::MIN_LEN.saturating_add(extra));
         self.write_to(&mut buf);
         buf.freeze()
     }
@@ -265,23 +306,27 @@ impl NegativeAck {
         }
     }
 
+    /// Parse a Negative Ack from payload bytes
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if payload is less than 5 bytes
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::MIN_LEN {
-            return Err(Error::PayloadTooShort {
+        let header: [u8; 5] = payload
+            .get(..Self::MIN_LEN)
+            .and_then(|s| s.try_into().ok())
+            .ok_or(Error::PayloadTooShort {
                 expected: Self::MIN_LEN,
                 actual: payload.len(),
-            });
-        }
+            })?;
 
-        let source_address = u16::from_be_bytes([payload[0], payload[1]]);
-        let target_address = u16::from_be_bytes([payload[2], payload[3]]);
-        let nack_code = NackCode::from_u8(payload[4]).unwrap_or(NackCode::TransportProtocolError);
+        let source_address = u16::from_be_bytes([header[0], header[1]]);
+        let target_address = u16::from_be_bytes([header[2], header[3]]);
+        let nack_code = NackCode::from_u8(header[4]).unwrap_or(NackCode::TransportProtocolError);
 
-        let previous_data = if payload.len() > Self::MIN_LEN {
-            Some(Bytes::copy_from_slice(&payload[5..]))
-        } else {
-            None
-        };
+        let previous_data = payload
+            .get(5..)
+            .filter(|d| !d.is_empty())
+            .map(Bytes::copy_from_slice);
 
         Ok(Self {
             source_address,

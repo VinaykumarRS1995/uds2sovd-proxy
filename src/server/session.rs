@@ -1,10 +1,14 @@
-//! Session management for DoIP connections
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
+//! Session management for `DoIP` connections
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+/// Session states per ISO 13400-2 connection lifecycle
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionState {
     Connected,
@@ -21,6 +25,7 @@ pub struct Session {
 }
 
 impl Session {
+    #[must_use]
     pub fn new(id: u64, peer_addr: SocketAddr) -> Self {
         Self {
             id,
@@ -35,6 +40,7 @@ impl Session {
         self.state = SessionState::RoutingActive;
     }
 
+    #[must_use]
     pub fn is_routing_active(&self) -> bool {
         self.state == SessionState::RoutingActive
     }
@@ -48,6 +54,7 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
+    #[must_use]
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
     }
@@ -55,7 +62,7 @@ impl SessionManager {
     pub fn create_session(&self, peer_addr: SocketAddr) -> Session {
         let mut next_id = self.next_id.write();
         let id = *next_id;
-        *next_id += 1;
+        *next_id = next_id.saturating_add(1);
 
         let session = Session::new(id, peer_addr);
         self.sessions.write().insert(id, session.clone());

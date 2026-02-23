@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Contributors to the Eclipse Foundation
+
 //! Vehicle Identification handlers (ISO 13400-2)
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -13,14 +16,10 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PayloadTooShort { expected, actual } => {
-                write!(
-                    f,
-                    "payload too short: need {} bytes, got {}",
-                    expected, actual
-                )
+                write!(f, "payload too short: need {expected} bytes, got {actual}")
             }
-            Self::InvalidVinLength(len) => write!(f, "VIN must be 17 bytes, got {}", len),
-            Self::InvalidEidLength(len) => write!(f, "EID must be 6 bytes, got {}", len),
+            Self::InvalidVinLength(len) => write!(f, "VIN must be 17 bytes, got {len}"),
+            Self::InvalidEidLength(len) => write!(f, "EID must be 6 bytes, got {len}"),
         }
     }
 }
@@ -32,6 +31,11 @@ impl std::error::Error for Error {}
 pub struct Request;
 
 impl Request {
+    /// Parse vehicle identification request
+    ///
+    /// # Errors
+    ///
+    /// This function currently always succeeds but returns `Result` for API consistency.
     pub fn parse(_payload: &[u8]) -> Result<Self, Error> {
         Ok(Self)
     }
@@ -46,19 +50,23 @@ pub struct RequestWithEid {
 impl RequestWithEid {
     pub const LEN: usize = 6;
 
+    /// Parse a Vehicle ID Request with EID from payload bytes
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if payload is less than 6 bytes
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::LEN {
-            return Err(Error::PayloadTooShort {
+        let eid: [u8; 6] = payload
+            .get(..Self::LEN)
+            .and_then(|s| s.try_into().ok())
+            .ok_or(Error::PayloadTooShort {
                 expected: Self::LEN,
                 actual: payload.len(),
-            });
-        }
+            })?;
 
-        let mut eid = [0u8; 6];
-        eid.copy_from_slice(&payload[0..6]);
         Ok(Self { eid })
     }
 
+    #[must_use]
     pub fn new(eid: [u8; 6]) -> Self {
         Self { eid }
     }
@@ -73,29 +81,34 @@ pub struct RequestWithVin {
 impl RequestWithVin {
     pub const LEN: usize = 17;
 
+    /// Parse a Vehicle ID Request with VIN from payload bytes
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if payload is less than 17 bytes
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::LEN {
-            return Err(Error::PayloadTooShort {
+        let vin: [u8; 17] = payload
+            .get(..Self::LEN)
+            .and_then(|s| s.try_into().ok())
+            .ok_or(Error::PayloadTooShort {
                 expected: Self::LEN,
                 actual: payload.len(),
-            });
-        }
+            })?;
 
-        let mut vin = [0u8; 17];
-        vin.copy_from_slice(&payload[0..17]);
         Ok(Self { vin })
     }
 
+    #[must_use]
     pub fn new(vin: [u8; 17]) -> Self {
         Self { vin }
     }
 
+    #[must_use]
     pub fn vin_string(&self) -> String {
         String::from_utf8_lossy(&self.vin).to_string()
     }
 }
 
-// Further action codes for vehicle identification response
+// Further action codes per ISO 13400-2 Table 23
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FurtherAction {
@@ -103,7 +116,7 @@ pub enum FurtherAction {
     RoutingActivationRequired = 0x10,
 }
 
-// Sync status for vehicle identification response
+// Synchronization status per ISO 13400-2 Table 22
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SyncStatus {
@@ -127,6 +140,7 @@ impl Response {
     pub const MIN_LEN: usize = 32; // without sync status
     pub const MAX_LEN: usize = 33; // with sync status
 
+    #[must_use]
     pub fn new(vin: [u8; 17], logical_address: u16, eid: [u8; 6], gid: [u8; 6]) -> Self {
         Self {
             vin,
@@ -138,16 +152,19 @@ impl Response {
         }
     }
 
+    #[must_use]
     pub fn with_routing_required(mut self) -> Self {
         self.further_action = FurtherAction::RoutingActivationRequired;
         self
     }
 
+    #[must_use]
     pub fn with_sync_status(mut self, status: SyncStatus) -> Self {
         self.sync_status = Some(status);
         self
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> Bytes {
         let len = if self.sync_status.is_some() {
             Self::MAX_LEN
@@ -170,6 +187,10 @@ impl Response {
         }
     }
 
+    /// Parse a Vehicle Identification Response from payload bytes
+    ///
+    /// # Errors
+    /// Returns `Error::PayloadTooShort` if payload is less than 32 bytes
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
         if payload.len() < Self::MIN_LEN {
             return Err(Error::PayloadTooShort {
@@ -178,30 +199,61 @@ impl Response {
             });
         }
 
-        let mut vin = [0u8; 17];
-        vin.copy_from_slice(&payload[0..17]);
+        // Safe: length checked above, use get() for clippy compliance
+        let vin: [u8; 17] =
+            payload
+                .get(..17)
+                .and_then(|s| s.try_into().ok())
+                .ok_or(Error::PayloadTooShort {
+                    expected: Self::MIN_LEN,
+                    actual: payload.len(),
+                })?;
 
-        let logical_address = u16::from_be_bytes([payload[17], payload[18]]);
+        let addr_bytes: [u8; 2] =
+            payload
+                .get(17..19)
+                .and_then(|s| s.try_into().ok())
+                .ok_or(Error::PayloadTooShort {
+                    expected: Self::MIN_LEN,
+                    actual: payload.len(),
+                })?;
+        let logical_address = u16::from_be_bytes(addr_bytes);
 
-        let mut eid = [0u8; 6];
-        eid.copy_from_slice(&payload[19..25]);
+        let eid: [u8; 6] =
+            payload
+                .get(19..25)
+                .and_then(|s| s.try_into().ok())
+                .ok_or(Error::PayloadTooShort {
+                    expected: Self::MIN_LEN,
+                    actual: payload.len(),
+                })?;
 
-        let mut gid = [0u8; 6];
-        gid.copy_from_slice(&payload[25..31]);
+        let gid: [u8; 6] =
+            payload
+                .get(25..31)
+                .and_then(|s| s.try_into().ok())
+                .ok_or(Error::PayloadTooShort {
+                    expected: Self::MIN_LEN,
+                    actual: payload.len(),
+                })?;
 
-        let further_action = match payload[31] {
-            0x10 => FurtherAction::RoutingActivationRequired,
-            _ => FurtherAction::NoFurtherAction,
-        };
-
-        let sync_status = if payload.len() >= Self::MAX_LEN {
-            Some(match payload[32] {
-                0x10 => SyncStatus::NotSynchronized,
-                _ => SyncStatus::Synchronized,
-            })
+        let further_action_byte = payload.get(31).copied().ok_or(Error::PayloadTooShort {
+            expected: Self::MIN_LEN,
+            actual: payload.len(),
+        })?;
+        let further_action = if further_action_byte == 0x10 {
+            FurtherAction::RoutingActivationRequired
         } else {
-            None
+            FurtherAction::NoFurtherAction
         };
+
+        let sync_status = payload.get(32).map(|&b| {
+            if b == 0x10 {
+                SyncStatus::NotSynchronized
+            } else {
+                SyncStatus::Synchronized
+            }
+        });
 
         Ok(Self {
             vin,
@@ -213,6 +265,7 @@ impl Response {
         })
     }
 
+    #[must_use]
     pub fn vin_string(&self) -> String {
         String::from_utf8_lossy(&self.vin).to_string()
     }
