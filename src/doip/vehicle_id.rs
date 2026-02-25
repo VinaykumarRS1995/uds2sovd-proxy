@@ -1,37 +1,44 @@
-//! Vehicle Identification handlers (ISO 13400-2)
+/*
+ * Copyright (c) 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-use bytes::{BufMut, Bytes, BytesMut};
+//! Vehicle Identification handlers (ISO 13400-2:2019)
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    PayloadTooShort { expected: usize, actual: usize },
-    InvalidVinLength(usize),
-    InvalidEidLength(usize),
-}
+use bytes::{BufMut, BytesMut};
+use tracing::warn;
+use crate::DoipError;
+use super::{DoipParseable, DoipSerializable, too_short, check_min_len};
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::PayloadTooShort { expected, actual } => {
-                write!(f, "payload too short: need {} bytes, got {}", expected, actual)
-            }
-            Self::InvalidVinLength(len) => write!(f, "VIN must be 17 bytes, got {}", len),
-            Self::InvalidEidLength(len) => write!(f, "EID must be 6 bytes, got {}", len),
-        }
-    }
-}
+// Wire-format field lengths for VehicleIdentificationResponse (ISO 13400-2:2019)
+const VIN_LEN: usize = 17;
+const LOGICAL_ADDR_LEN: usize = 2;
+const EID_LEN: usize = 6;
+const GID_LEN: usize = 6;
+const FURTHER_ACTION_LEN: usize = 1;
 
-impl std::error::Error for Error {}
+// Pre-computed byte offsets derived from field layout
+const VIN_END: usize = VIN_LEN;                                      // 17
+const ADDR_START: usize = VIN_END;                                    // 17
+const ADDR_END: usize = ADDR_START + LOGICAL_ADDR_LEN;               // 19
+const EID_START: usize = ADDR_END;                                    // 19
+const EID_END: usize = EID_START + EID_LEN;                          // 25
+const GID_START: usize = EID_END;                                     // 25
+const GID_END: usize = GID_START + GID_LEN;                          // 31
+const FURTHER_ACTION_IDX: usize = GID_END;                            // 31
+const SYNC_STATUS_IDX: usize = FURTHER_ACTION_IDX + FURTHER_ACTION_LEN; // 32
 
 // Vehicle Identification Request (0x0001) - no payload
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Request;
-
-impl Request {
-    pub fn parse(_payload: &[u8]) -> Result<Self, Error> {
-        Ok(Self)
-    }
-}
 
 // Vehicle Identification Request with EID (0x0002) - 6 byte EID
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,19 +49,7 @@ pub struct RequestWithEid {
 impl RequestWithEid {
     pub const LEN: usize = 6;
 
-    pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::LEN {
-            return Err(Error::PayloadTooShort {
-                expected: Self::LEN,
-                actual: payload.len(),
-            });
-        }
-
-        let mut eid = [0u8; 6];
-        eid.copy_from_slice(&payload[0..6]);
-        Ok(Self { eid })
-    }
-
+    #[must_use]
     pub fn new(eid: [u8; 6]) -> Self {
         Self { eid }
     }
@@ -69,29 +64,18 @@ pub struct RequestWithVin {
 impl RequestWithVin {
     pub const LEN: usize = 17;
 
-    pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::LEN {
-            return Err(Error::PayloadTooShort {
-                expected: Self::LEN,
-                actual: payload.len(),
-            });
-        }
-
-        let mut vin = [0u8; 17];
-        vin.copy_from_slice(&payload[0..17]);
-        Ok(Self { vin })
-    }
-
+    #[must_use]
     pub fn new(vin: [u8; 17]) -> Self {
         Self { vin }
     }
 
+    #[must_use]
     pub fn vin_string(&self) -> String {
         String::from_utf8_lossy(&self.vin).to_string()
     }
 }
 
-// Further action codes for vehicle identification response
+// Further action codes per ISO 13400-2:2019 Table 23
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FurtherAction {
@@ -99,12 +83,34 @@ pub enum FurtherAction {
     RoutingActivationRequired = 0x10,
 }
 
-// Sync status for vehicle identification response
+impl TryFrom<u8> for FurtherAction {
+    type Error = u8;
+    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(Self::NoFurtherAction),
+            0x10 => Ok(Self::RoutingActivationRequired),
+            other => Err(other),
+        }
+    }
+}
+
+// Synchronization status per ISO 13400-2:2019 Table 22
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SyncStatus {
     Synchronized = 0x00,
     NotSynchronized = 0x10,
+}
+
+impl TryFrom<u8> for SyncStatus {
+    type Error = u8;
+    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(Self::Synchronized),
+            0x10 => Ok(Self::NotSynchronized),
+            other => Err(other),
+        }
+    }
 }
 
 // Vehicle Identification Response (0x0004)
@@ -120,9 +126,10 @@ pub struct Response {
 }
 
 impl Response {
-    pub const MIN_LEN: usize = 32; // without sync status
-    pub const MAX_LEN: usize = 33; // with sync status
+    pub const MIN_LEN: usize = SYNC_STATUS_IDX;      // 32: VIN(17) + Addr(2) + EID(6) + GID(6) + FurtherAction(1)
+    pub const MAX_LEN: usize = SYNC_STATUS_IDX + 1;  // 33: adds optional SyncStatus(1)
 
+    #[must_use]
     pub fn new(vin: [u8; 17], logical_address: u16, eid: [u8; 6], gid: [u8; 6]) -> Self {
         Self {
             vin,
@@ -134,66 +141,101 @@ impl Response {
         }
     }
 
+    #[must_use]
     pub fn with_routing_required(mut self) -> Self {
         self.further_action = FurtherAction::RoutingActivationRequired;
         self
     }
 
+    #[must_use]
     pub fn with_sync_status(mut self, status: SyncStatus) -> Self {
         self.sync_status = Some(status);
         self
     }
 
-    pub fn to_bytes(&self) -> Bytes {
-        let len = if self.sync_status.is_some() { Self::MAX_LEN } else { Self::MIN_LEN };
-        let mut buf = BytesMut::with_capacity(len);
-        self.write_to(&mut buf);
-        buf.freeze()
+    #[must_use]
+    pub fn vin_string(&self) -> String {
+        String::from_utf8_lossy(&self.vin).to_string()
     }
+}
 
-    pub fn write_to(&self, buf: &mut BytesMut) {
-        buf.extend_from_slice(&self.vin);
-        buf.put_u16(self.logical_address);
-        buf.extend_from_slice(&self.eid);
-        buf.extend_from_slice(&self.gid);
-        buf.put_u8(self.further_action as u8);
-        if let Some(status) = self.sync_status {
-            buf.put_u8(status as u8);
-        }
+impl DoipParseable for Request {
+    fn parse(_payload: &[u8]) -> std::result::Result<Self, DoipError> {
+        Ok(Self)
     }
+}
 
-    pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        if payload.len() < Self::MIN_LEN {
-            return Err(Error::PayloadTooShort {
-                expected: Self::MIN_LEN,
-                actual: payload.len(),
-            });
-        }
+impl DoipParseable for RequestWithEid {
+    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
+        let eid: [u8; 6] = payload
+            .get(..Self::LEN)
+            .and_then(|s| s.try_into().ok())
+            .ok_or_else(|| {
+                let e = too_short(payload, Self::LEN);
+                warn!("VehicleId RequestWithEid parse failed: {}", e);
+                e
+            })?;
 
-        let mut vin = [0u8; 17];
-        vin.copy_from_slice(&payload[0..17]);
+        Ok(Self { eid })
+    }
+}
 
-        let logical_address = u16::from_be_bytes([payload[17], payload[18]]);
+impl DoipParseable for RequestWithVin {
+    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
+        let vin: [u8; 17] = payload
+            .get(..Self::LEN)
+            .and_then(|s| s.try_into().ok())
+            .ok_or_else(|| {
+                let e = too_short(payload, Self::LEN);
+                warn!("VehicleId RequestWithVin parse failed: {}", e);
+                e
+            })?;
 
-        let mut eid = [0u8; 6];
-        eid.copy_from_slice(&payload[19..25]);
+        Ok(Self { vin })
+    }
+}
 
-        let mut gid = [0u8; 6];
-        gid.copy_from_slice(&payload[25..31]);
-
-        let further_action = match payload[31] {
-            0x10 => FurtherAction::RoutingActivationRequired,
-            _ => FurtherAction::NoFurtherAction,
+impl DoipParseable for Response {
+    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
+        if let Err(e) = check_min_len(payload, Self::MIN_LEN) {
+            warn!("VehicleId Response parse failed: {}", e);
+            return Err(e);
         };
 
-        let sync_status = if payload.len() >= Self::MAX_LEN {
-            Some(match payload[32] {
-                0x10 => SyncStatus::NotSynchronized,
-                _ => SyncStatus::Synchronized,
-            })
-        } else {
-            None
-        };
+        let vin: [u8; VIN_LEN] =
+            payload
+                .get(..VIN_END)
+                .and_then(|s| s.try_into().ok())
+                .ok_or_else(|| too_short(payload, Self::MIN_LEN))?;
+
+        let addr_bytes: [u8; LOGICAL_ADDR_LEN] =
+            payload
+                .get(ADDR_START..ADDR_END)
+                .and_then(|s| s.try_into().ok())
+                .ok_or_else(|| too_short(payload, Self::MIN_LEN))?;
+        let logical_address = u16::from_be_bytes(addr_bytes);
+
+        let eid: [u8; EID_LEN] =
+            payload
+                .get(EID_START..EID_END)
+                .and_then(|s| s.try_into().ok())
+                .ok_or_else(|| too_short(payload, Self::MIN_LEN))?;
+
+        let gid: [u8; GID_LEN] =
+            payload
+                .get(GID_START..GID_END)
+                .and_then(|s| s.try_into().ok())
+                .ok_or_else(|| too_short(payload, Self::MIN_LEN))?;
+
+        let further_action_byte = payload
+            .get(FURTHER_ACTION_IDX)
+            .copied()
+            .ok_or_else(|| too_short(payload, Self::MIN_LEN))?;
+        let further_action = FurtherAction::try_from(further_action_byte)
+            .unwrap_or(FurtherAction::NoFurtherAction);
+
+        let sync_status = payload.get(SYNC_STATUS_IDX)
+            .map(|&b| SyncStatus::try_from(b).unwrap_or(SyncStatus::Synchronized));
 
         Ok(Self {
             vin,
@@ -204,15 +246,29 @@ impl Response {
             sync_status,
         })
     }
+}
 
-    pub fn vin_string(&self) -> String {
-        String::from_utf8_lossy(&self.vin).to_string()
+impl DoipSerializable for Response {
+    fn serialized_len(&self) -> Option<usize> {
+        Some(Self::MIN_LEN + if self.sync_status.is_some() { 1 } else { 0 })
+    }
+
+    fn write_to(&self, buf: &mut BytesMut) {
+        buf.extend_from_slice(&self.vin);
+        buf.put_u16(self.logical_address);
+        buf.extend_from_slice(&self.eid);
+        buf.extend_from_slice(&self.gid);
+        buf.put_u8(self.further_action as u8);
+        if let Some(status) = self.sync_status {
+            buf.put_u8(status as u8);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::doip::{DoipParseable, DoipSerializable};
 
     #[test]
     fn parse_basic_request() {
@@ -266,7 +322,10 @@ mod tests {
         let gid = [0; 6];
 
         let resp = Response::new(vin, 0x1000, eid, gid).with_routing_required();
-        assert_eq!(resp.further_action, FurtherAction::RoutingActivationRequired);
+        assert_eq!(
+            resp.further_action,
+            FurtherAction::RoutingActivationRequired
+        );
     }
 
     #[test]
@@ -278,9 +337,9 @@ mod tests {
         let resp = Response::new(vin, 0x1000, eid, gid);
         let bytes = resp.to_bytes();
 
-        assert_eq!(bytes.len(), 32);
-        assert_eq!(&bytes[0..17], b"WVWZZZ3CZWE123456");
-        assert_eq!(&bytes[17..19], &[0x10, 0x00]); // logical address
+        assert_eq!(bytes.len(), Response::MIN_LEN);
+        assert_eq!(&bytes[..VIN_LEN], b"WVWZZZ3CZWE123456");
+        assert_eq!(&bytes[ADDR_START..ADDR_END], &[0x10, 0x00]); // logical address
     }
 
     #[test]
@@ -289,12 +348,11 @@ mod tests {
         let eid = [0; 6];
         let gid = [0; 6];
 
-        let resp = Response::new(vin, 0x1000, eid, gid)
-            .with_sync_status(SyncStatus::Synchronized);
+        let resp = Response::new(vin, 0x1000, eid, gid).with_sync_status(SyncStatus::Synchronized);
         let bytes = resp.to_bytes();
 
-        assert_eq!(bytes.len(), 33);
-        assert_eq!(bytes[32], 0x00); // sync status
+        assert_eq!(bytes.len(), Response::MAX_LEN);
+        assert_eq!(bytes[SYNC_STATUS_IDX], SyncStatus::Synchronized as u8); // sync status
     }
 
     #[test]

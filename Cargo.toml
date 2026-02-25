@@ -10,21 +10,24 @@ tokio-util = { version = "0.7", features = ["codec"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.9.11+spec-1.1.0"
+toml = "0.9"
 
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Error handling
-thiserror = "2.0.18"
+thiserror = "2.0"
 anyhow = "1.0"
 
 # Data structures
-bytes = "1.10.1"
-dashmap = "6.1.0"
+bytes = "1.0"
+dashmap = "6.0"
 parking_lot = "0.12"
 
 # Utilities
 uuid = { version = "1.6", features = ["v4"] }
 clap = { version = "4.4", features = ["derive"] }
+
+[features]
+test-handlers = []
