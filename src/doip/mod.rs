@@ -34,7 +34,7 @@ pub trait DoipParseable: Sized {
     ///
     /// # Errors
     /// Returns [`DoipError`] if the payload is malformed or too short.
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError>;
+    fn parse(payload: &[u8]) -> crate::DoipResult<Self>;
 }
 
 /// Trait for `DoIP` message types that can be serialized to a [`Bytes`] buffer.
@@ -76,7 +76,7 @@ pub(crate) fn too_short(payload: &[u8], expected: usize) -> DoipError {
 }
 
 /// Return `Err` if `payload` is shorter than `expected` bytes.
-pub(crate) fn check_min_len(payload: &[u8], expected: usize) -> std::result::Result<(), DoipError> {
+pub(crate) fn check_min_len(payload: &[u8], expected: usize) -> crate::DoipResult<()> {
     if payload.len() < expected {
         Err(too_short(payload, expected))
     } else {
@@ -91,7 +91,7 @@ pub(crate) fn check_min_len(payload: &[u8], expected: usize) -> std::result::Res
 pub(crate) fn parse_fixed_slice<const N: usize>(
     payload: &[u8],
     context: &str,
-) -> std::result::Result<[u8; N], DoipError> {
+) -> crate::DoipResult<[u8; N]> {
     payload
         .get(..N)
         .and_then(|s| s.try_into().ok())

@@ -23,7 +23,7 @@ use tracing::warn;
 pub struct Request;
 
 impl DoipParseable for Request {
-    fn parse(_payload: &[u8]) -> std::result::Result<Self, DoipError> {
+    fn parse(_payload: &[u8]) -> crate::DoipResult<Self> {
         Ok(Self)
     }
 }
@@ -44,7 +44,7 @@ pub struct Response {
 }
 
 impl DoipParseable for Response {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
+    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
         let bytes: [u8; 2] = payload
             .get(..Self::LEN)
             .and_then(|s| s.try_into().ok())

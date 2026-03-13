@@ -20,8 +20,8 @@
 //! # Example
 //! ```no_run
 //! # use doip_server::doip::{DoipMessage, DoipPayload};
-//! # use doip_server::DoipError;
-//! fn dispatch(msg: &DoipMessage) -> Result<(), DoipError> {
+//! # use doip_server::DoipResult;
+//! fn dispatch(msg: &DoipMessage) -> DoipResult<()> {
 //!     match DoipPayload::parse(msg)? {
 //!         DoipPayload::DiagnosticMessage(m) => println!("UDS payload: {:?}", m),
 //!         DoipPayload::AliveCheckRequest(_) => println!("Alive check received"),
@@ -54,9 +54,9 @@ pub enum DoipPayload {
     /// `0x8001` – Diagnostic Message (UDS data)
     DiagnosticMessage(diagnostic_message::Message),
     /// `0x8002` – Diagnostic Message Positive Acknowledgement
-    DiagnosticMessagePositiveAck(diagnostic_message::PositiveAck),
+    DiagnosticMessagePositiveAck(diagnostic_message::DiagnosticAck),
     /// `0x8003` – Diagnostic Message Negative Acknowledgement
-    DiagnosticMessageNegativeAck(diagnostic_message::NegativeAck),
+    DiagnosticMessageNegativeAck(diagnostic_message::DiagnosticAck),
     /// `0x0001` – Vehicle Identification Request (no filter)
     VehicleIdentificationRequest(vehicle_id::Request),
     /// `0x0002` – Vehicle Identification Request filtered by EID
@@ -79,7 +79,7 @@ impl DoipPayload {
     ///
     /// Returns a more specific [`DoipError`] (e.g. [`DoipError::PayloadTooShort`])
     /// when the payload bytes are present but malformed.
-    pub fn parse(msg: &DoipMessage) -> std::result::Result<Self, DoipError> {
+    pub fn parse(msg: &DoipMessage) -> crate::DoipResult<Self> {
         let payload = msg.payload().as_ref();
 
         let payload_type = msg
@@ -103,10 +103,10 @@ impl DoipPayload {
                 diagnostic_message::Message::parse(payload)?,
             )),
             PayloadType::DiagnosticMessagePositiveAck => Ok(Self::DiagnosticMessagePositiveAck(
-                diagnostic_message::PositiveAck::parse(payload)?,
+                diagnostic_message::DiagnosticAck::parse_positive(payload)?,
             )),
             PayloadType::DiagnosticMessageNegativeAck => Ok(Self::DiagnosticMessageNegativeAck(
-                diagnostic_message::NegativeAck::parse(payload)?,
+                diagnostic_message::DiagnosticAck::parse_negative(payload)?,
             )),
             PayloadType::VehicleIdentificationRequest => Ok(Self::VehicleIdentificationRequest(
                 vehicle_id::Request::parse(payload)?,

@@ -13,7 +13,7 @@
 
 //! Vehicle Identification handlers (ISO 13400-2:2019)
 
-use super::{DoipParseable, DoipSerializable, check_min_len, too_short};
+use super::{DoipParseable, DoipSerializable, check_min_len, parse_fixed_slice, too_short};
 use crate::DoipError;
 use bytes::{BufMut, BytesMut};
 use tracing::warn;
@@ -184,43 +184,27 @@ impl Response {
 }
 
 impl DoipParseable for Request {
-    fn parse(_payload: &[u8]) -> std::result::Result<Self, DoipError> {
+    fn parse(_payload: &[u8]) -> crate::DoipResult<Self> {
         Ok(Self)
     }
 }
 
 impl DoipParseable for RequestWithEid {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
-        let eid: [u8; 6] = payload
-            .get(..Self::LEN)
-            .and_then(|s| s.try_into().ok())
-            .ok_or_else(|| {
-                let e = too_short(payload, Self::LEN);
-                warn!("VehicleId RequestWithEid parse failed: {}", e);
-                e
-            })?;
-
+    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+        let eid: [u8; 6] = parse_fixed_slice(payload, "VehicleId RequestWithEid")?;
         Ok(Self { eid })
     }
 }
 
 impl DoipParseable for RequestWithVin {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
-        let vin: [u8; 17] = payload
-            .get(..Self::LEN)
-            .and_then(|s| s.try_into().ok())
-            .ok_or_else(|| {
-                let e = too_short(payload, Self::LEN);
-                warn!("VehicleId RequestWithVin parse failed: {}", e);
-                e
-            })?;
-
+    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+        let vin: [u8; 17] = parse_fixed_slice(payload, "VehicleId RequestWithVin")?;
         Ok(Self { vin })
     }
 }
 
 impl DoipParseable for Response {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
+    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
         if let Err(e) = check_min_len(payload, Self::MIN_LEN) {
             warn!("VehicleId Response parse failed: {}", e);
             return Err(e);

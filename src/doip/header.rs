@@ -186,7 +186,7 @@ impl DoipHeader {
     ///
     /// # Errors
     /// Returns [`crate::DoipError::InvalidHeader`] if data is less than 8 bytes.
-    pub(crate) fn parse(data: &[u8]) -> std::result::Result<Self, crate::DoipError> {
+    pub(crate) fn parse(data: &[u8]) -> crate::DoipResult<Self> {
         let header: [u8; DOIP_HEADER_LENGTH] = data
             .get(..DOIP_HEADER_LENGTH)
             .and_then(|s| s.try_into().ok())

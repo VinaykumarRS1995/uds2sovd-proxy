@@ -22,20 +22,18 @@ const HEADER_BYTES: usize = ADDRESS_BYTES * 2;
 const ACK_CODE_BYTES: usize = 1;
 const MIN_USER_DATA_BYTES: usize = 1;
 
-// Diagnostic message positive ack codes per ISO 13400-2:2019 Table 27
+/// Outcome of a diagnostic message acknowledgment (ISO 13400-2:2019).
+///
+/// Used by [`DiagnosticAck`] to represent either a positive or negative result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum AckCode {
-    Acknowledged = 0x00,
+pub enum AckResult {
+    /// Positive acknowledgment — message was accepted (wire code 0x00).
+    Positive,
+    /// Negative acknowledgment — message was rejected with the given code.
+    Negative(NackCode),
 }
 
-impl From<AckCode> for u8 {
-    fn from(code: AckCode) -> u8 {
-        code as u8
-    }
-}
-
-// Diagnostic message negative ack codes per ISO 13400-2:2019 Table 28
+/// Diagnostic message negative acknowledgment codes per ISO 13400-2:2019 Table 28.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum NackCode {
@@ -123,7 +121,7 @@ impl Message {
     /// # Errors
     /// Returns [`DoipError::PayloadTooShort`] if buffer is less than 5 bytes
     /// Returns [`DoipError::EmptyUserData`] if no UDS data is present
-    pub fn parse_buf(buf: &mut Bytes) -> std::result::Result<Self, DoipError> {
+    pub fn parse_buf(buf: &mut Bytes) -> crate::DoipResult<Self> {
         let msg = <Self as DoipParseable>::parse(buf)?;
         buf.advance(buf.len());
         Ok(msg)
@@ -134,131 +132,144 @@ impl Message {
     }
 }
 
-/// Diagnostic Message Positive Acknowledgment (message type 0x8002)
+/// Diagnostic Message Acknowledgment (payload types 0x8002 and 0x8003)
 ///
-/// Sent by a `DoIP` entity to acknowledge receipt of a diagnostic message.
-///
-/// # Wire Format  
-/// Payload: SA(2) + TA(2) + `ack_code(1)` + optional `previous_diag_data`
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PositiveAck {
-    source_address: u16,
-    target_address: u16,
-    ack_code: AckCode,
-    previous_data: Option<Bytes>,
-}
-
-impl PositiveAck {
-    /// Minimum positive ack length in bytes
-    pub const MIN_LEN: usize = HEADER_BYTES + ACK_CODE_BYTES;
-
-    /// Create a new positive acknowledgment
-    #[must_use]
-    pub fn new(source: u16, target: u16) -> Self {
-        Self {
-            source_address: source,
-            target_address: target,
-            ack_code: AckCode::Acknowledged,
-            previous_data: None,
-        }
-    }
-
-    /// Create a positive acknowledgment with previous diagnostic data
-    pub fn with_previous_data(source: u16, target: u16, data: Bytes) -> Self {
-        Self {
-            source_address: source,
-            target_address: target,
-            ack_code: AckCode::Acknowledged,
-            // ISO 13400-2:2019: previous diagnostic data is optional; treat empty as absent
-            previous_data: if data.is_empty() { None } else { Some(data) },
-        }
-    }
-
-    /// Get the source address
-    pub fn source_address(&self) -> u16 {
-        self.source_address
-    }
-
-    /// Get the target address
-    pub fn target_address(&self) -> u16 {
-        self.target_address
-    }
-
-    /// Get the acknowledgment code
-    pub fn ack_code(&self) -> AckCode {
-        self.ack_code
-    }
-
-    /// Get the previous diagnostic data
-    pub fn previous_data(&self) -> Option<&Bytes> {
-        self.previous_data.as_ref()
-    }
-}
-
-/// Diagnostic Message Negative Acknowledgment (message type 0x8003)
-///
-/// Sent by a `DoIP` entity to indicate rejection of a diagnostic message.
-/// NACK codes are defined in ISO 13400-2:2019 Table 28.
+/// Represents both positive and negative acknowledgments as defined in
+/// ISO 13400-2:2019. Use [`AckResult`] to distinguish the outcome.
 ///
 /// # Wire Format
-/// Payload: SA(2) + TA(2) + `nack_code(1)` + optional `previous_diag_data`
+/// Payload: SA(2) + TA(2) + code(1) + optional `previous_diag_data`
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NegativeAck {
+pub struct DiagnosticAck {
     source_address: u16,
     target_address: u16,
-    nack_code: NackCode,
+    result: AckResult,
     previous_data: Option<Bytes>,
 }
 
-impl NegativeAck {
-    /// Minimum negative ack length in bytes
+impl DiagnosticAck {
+    /// Minimum ack length in bytes (SA + TA + code byte).
     pub const MIN_LEN: usize = HEADER_BYTES + ACK_CODE_BYTES;
 
-    /// Create a new negative acknowledgment
+    /// Create a positive acknowledgment.
     #[must_use]
-    pub fn new(source: u16, target: u16, code: NackCode) -> Self {
+    pub fn positive(source: u16, target: u16) -> Self {
         Self {
             source_address: source,
             target_address: target,
-            nack_code: code,
+            result: AckResult::Positive,
             previous_data: None,
         }
     }
 
-    /// Get the source address
+    /// Create a positive acknowledgment with previous diagnostic data.
+    #[must_use]
+    pub fn positive_with_data(source: u16, target: u16, data: Bytes) -> Self {
+        Self {
+            source_address: source,
+            target_address: target,
+            result: AckResult::Positive,
+            // ISO 13400-2:2019: previous diagnostic data is optional; treat empty as absent
+            previous_data: if data.is_empty() { None } else { Some(data) },
+        }
+    }
+
+    /// Create a negative acknowledgment.
+    #[must_use]
+    pub fn negative(source: u16, target: u16, code: NackCode) -> Self {
+        Self {
+            source_address: source,
+            target_address: target,
+            result: AckResult::Negative(code),
+            previous_data: None,
+        }
+    }
+
+    /// Create a negative acknowledgment with previous diagnostic data.
+    #[must_use]
+    pub fn negative_with_data(source: u16, target: u16, code: NackCode, data: Bytes) -> Self {
+        Self {
+            source_address: source,
+            target_address: target,
+            result: AckResult::Negative(code),
+            // ISO 13400-2:2019: previous diagnostic data is optional; treat empty as absent
+            previous_data: if data.is_empty() { None } else { Some(data) },
+        }
+    }
+
+    /// Returns the source address.
+    #[must_use]
     pub fn source_address(&self) -> u16 {
         self.source_address
     }
 
-    /// Get the target address
+    /// Returns the target address.
+    #[must_use]
     pub fn target_address(&self) -> u16 {
         self.target_address
     }
 
-    /// Get the negative acknowledgment code
-    pub fn nack_code(&self) -> NackCode {
-        self.nack_code
+    /// Returns the acknowledgment result.
+    #[must_use]
+    pub fn result(&self) -> AckResult {
+        self.result
     }
 
-    /// Get the previous diagnostic data
+    /// Returns the previous diagnostic data, if any.
+    #[must_use]
     pub fn previous_data(&self) -> Option<&Bytes> {
         self.previous_data.as_ref()
     }
 
-    /// Create a negative acknowledgment with previous diagnostic data
-    pub fn with_previous_data(source: u16, target: u16, code: NackCode, data: Bytes) -> Self {
-        Self {
-            source_address: source,
-            target_address: target,
-            nack_code: code,
-            // ISO 13400-2:2019: previous diagnostic data is optional; treat empty as absent
-            previous_data: if data.is_empty() { None } else { Some(data) },
-        }
+    /// Parse a positive acknowledgment payload (payload type 0x8002).
+    ///
+    /// # Errors
+    /// Returns [`DoipError::PayloadTooShort`] if payload is less than 5 bytes.
+    pub fn parse_positive(payload: &[u8]) -> crate::DoipResult<Self> {
+        let header: [u8; HEADER_BYTES] = parse_fixed_slice(payload, "DiagnosticPositiveAck")?;
+        let source_address = u16::from_be_bytes([header[0], header[1]]);
+        let target_address = u16::from_be_bytes([header[2], header[3]]);
+        let previous_data = payload
+            .get(Self::MIN_LEN..)
+            .filter(|d| !d.is_empty())
+            .map(Bytes::copy_from_slice);
+        Ok(Self {
+            source_address,
+            target_address,
+            result: AckResult::Positive,
+            previous_data,
+        })
+    }
+
+    /// Parse a negative acknowledgment payload (payload type 0x8003).
+    ///
+    /// # Errors
+    /// Returns [`DoipError::PayloadTooShort`] if payload is less than 5 bytes.
+    /// Returns [`DoipError::UnknownNackCode`] for unrecognized NACK codes.
+    pub fn parse_negative(payload: &[u8]) -> crate::DoipResult<Self> {
+        let header: [u8; HEADER_BYTES] = parse_fixed_slice(payload, "DiagnosticNegativeAck")?;
+        let source_address = u16::from_be_bytes([header[0], header[1]]);
+        let target_address = u16::from_be_bytes([header[2], header[3]]);
+        let nack_code = payload
+            .get(HEADER_BYTES)
+            .copied()
+            .ok_or_else(|| too_short(payload, Self::MIN_LEN))
+            .and_then(NackCode::try_from)?;
+        let previous_data = payload
+            .get(Self::MIN_LEN..)
+            .filter(|d| !d.is_empty())
+            .map(Bytes::copy_from_slice);
+        Ok(Self {
+            source_address,
+            target_address,
+            result: AckResult::Negative(nack_code),
+            previous_data,
+        })
     }
 }
 
 impl DoipParseable for Message {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
+    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
         let header: [u8; HEADER_BYTES] = parse_fixed_slice(payload, "DiagnosticMessage")?;
 
         let source_address = u16::from_be_bytes([header[0], header[1]]);
@@ -298,29 +309,7 @@ impl DoipSerializable for Message {
     }
 }
 
-impl DoipParseable for PositiveAck {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
-        let header: [u8; HEADER_BYTES] = parse_fixed_slice(payload, "DiagnosticPositiveAck")?;
-
-        let source_address = u16::from_be_bytes([header[0], header[1]]);
-        let target_address = u16::from_be_bytes([header[2], header[3]]);
-        let ack_code = AckCode::Acknowledged;
-
-        let previous_data = payload
-            .get(Self::MIN_LEN..)
-            .filter(|d| !d.is_empty())
-            .map(Bytes::copy_from_slice);
-
-        Ok(Self {
-            source_address,
-            target_address,
-            ack_code,
-            previous_data,
-        })
-    }
-}
-
-impl DoipSerializable for PositiveAck {
+impl DoipSerializable for DiagnosticAck {
     fn serialized_len(&self) -> Option<usize> {
         Some(Self::MIN_LEN + self.previous_data.as_ref().map_or(0, bytes::Bytes::len))
     }
@@ -328,48 +317,10 @@ impl DoipSerializable for PositiveAck {
     fn write_to(&self, buf: &mut BytesMut) {
         buf.put_u16(self.source_address);
         buf.put_u16(self.target_address);
-        buf.put_u8(u8::from(self.ack_code));
-        if let Some(ref data) = self.previous_data {
-            buf.extend_from_slice(data);
-        }
-    }
-}
-
-impl DoipParseable for NegativeAck {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
-        let header: [u8; HEADER_BYTES] = parse_fixed_slice(payload, "DiagnosticNegativeAck")?;
-
-        let source_address = u16::from_be_bytes([header[0], header[1]]);
-        let target_address = u16::from_be_bytes([header[2], header[3]]);
-        let nack_code = payload
-            .get(HEADER_BYTES)
-            .copied()
-            .ok_or_else(|| too_short(payload, Self::MIN_LEN))
-            .and_then(NackCode::try_from)?;
-
-        let previous_data = payload
-            .get(Self::MIN_LEN..)
-            .filter(|d| !d.is_empty())
-            .map(Bytes::copy_from_slice);
-
-        Ok(Self {
-            source_address,
-            target_address,
-            nack_code,
-            previous_data,
-        })
-    }
-}
-
-impl DoipSerializable for NegativeAck {
-    fn serialized_len(&self) -> Option<usize> {
-        Some(Self::MIN_LEN + self.previous_data.as_ref().map_or(0, bytes::Bytes::len))
-    }
-
-    fn write_to(&self, buf: &mut BytesMut) {
-        buf.put_u16(self.source_address);
-        buf.put_u16(self.target_address);
-        buf.put_u8(u8::from(self.nack_code));
+        buf.put_u8(match self.result {
+            AckResult::Positive => 0x00,
+            AckResult::Negative(code) => u8::from(code),
+        });
         if let Some(ref data) = self.previous_data {
             buf.extend_from_slice(data);
         }
@@ -429,38 +380,44 @@ mod tests {
 
     #[test]
     fn build_positive_ack() {
-        let ack = PositiveAck::new(0x1000, 0x0E80);
+        let ack = DiagnosticAck::positive(0x1000, 0x0E80);
         let bytes = ack.to_bytes();
 
-        assert_eq!(bytes.len(), PositiveAck::MIN_LEN);
-        assert_eq!(&bytes[..ADDRESS_BYTES], &[0x10, 0x00]); // source (ECU)
-        assert_eq!(&bytes[ADDRESS_BYTES..HEADER_BYTES], &[0x0E, 0x80]); // target (tester)
-        assert_eq!(bytes[HEADER_BYTES], 0x00); // ack code
+        assert_eq!(bytes.len(), DiagnosticAck::MIN_LEN);
+        assert_eq!(&bytes[..ADDRESS_BYTES], &[0x10, 0x00]);
+        assert_eq!(&bytes[ADDRESS_BYTES..HEADER_BYTES], &[0x0E, 0x80]);
+        assert_eq!(bytes[HEADER_BYTES], 0x00); // positive ack wire code
+        assert_eq!(ack.result(), AckResult::Positive);
     }
 
     #[test]
     fn build_positive_ack_with_prev_data() {
         let prev = Bytes::from_static(&[0x22, 0xF1, 0x90]);
-        let expected_len = PositiveAck::MIN_LEN + prev.len();
-        let ack = PositiveAck::with_previous_data(0x1000, 0x0E80, prev);
+        let expected_len = DiagnosticAck::MIN_LEN + prev.len();
+        let ack = DiagnosticAck::positive_with_data(0x1000, 0x0E80, prev);
         let bytes = ack.to_bytes();
 
         assert_eq!(bytes.len(), expected_len);
-        assert_eq!(&bytes[PositiveAck::MIN_LEN..], &[0x22, 0xF1, 0x90]);
+        assert_eq!(&bytes[DiagnosticAck::MIN_LEN..], &[0x22, 0xF1, 0x90]);
+        assert_eq!(ack.result(), AckResult::Positive);
     }
 
     #[test]
     fn build_negative_ack() {
-        let nack = NegativeAck::new(0x1000, 0x0E80, NackCode::UnknownTargetAddress);
+        let nack = DiagnosticAck::negative(0x1000, 0x0E80, NackCode::UnknownTargetAddress);
         let bytes = nack.to_bytes();
 
-        assert_eq!(bytes.len(), NegativeAck::MIN_LEN);
+        assert_eq!(bytes.len(), DiagnosticAck::MIN_LEN);
         assert_eq!(bytes[HEADER_BYTES], 0x03);
+        assert_eq!(
+            nack.result(),
+            AckResult::Negative(NackCode::UnknownTargetAddress)
+        );
     }
 
     #[test]
     fn build_negative_ack_target_unreachable() {
-        let nack = NegativeAck::new(0x1000, 0x0E80, NackCode::TargetUnreachable);
+        let nack = DiagnosticAck::negative(0x1000, 0x0E80, NackCode::TargetUnreachable);
         let bytes = nack.to_bytes();
         assert_eq!(bytes[HEADER_BYTES], 0x06);
     }
@@ -468,19 +425,23 @@ mod tests {
     #[test]
     fn parse_positive_ack() {
         let payload = [0x10, 0x00, 0x0E, 0x80, 0x00];
-        let ack = PositiveAck::parse(&payload).unwrap();
+        let ack = DiagnosticAck::parse_positive(&payload).unwrap();
 
         assert_eq!(ack.source_address(), 0x1000);
         assert_eq!(ack.target_address(), 0x0E80);
+        assert_eq!(ack.result(), AckResult::Positive);
         assert!(ack.previous_data().is_none());
     }
 
     #[test]
     fn parse_negative_ack() {
         let payload = [0x10, 0x00, 0x0E, 0x80, 0x03];
-        let nack = NegativeAck::parse(&payload).unwrap();
+        let nack = DiagnosticAck::parse_negative(&payload).unwrap();
 
-        assert_eq!(nack.nack_code(), NackCode::UnknownTargetAddress);
+        assert_eq!(
+            nack.result(),
+            AckResult::Negative(NackCode::UnknownTargetAddress)
+        );
     }
 
     #[test]
@@ -493,17 +454,17 @@ mod tests {
 
     #[test]
     fn roundtrip_positive_ack() {
-        let original = PositiveAck::new(0x1000, 0x0E80);
+        let original = DiagnosticAck::positive(0x1000, 0x0E80);
         let bytes = original.to_bytes();
-        let parsed = PositiveAck::parse(&bytes).unwrap();
+        let parsed = DiagnosticAck::parse_positive(&bytes).unwrap();
         assert_eq!(original, parsed);
     }
 
     #[test]
     fn roundtrip_negative_ack() {
-        let original = NegativeAck::new(0x1000, 0x0E80, NackCode::OutOfMemory);
+        let original = DiagnosticAck::negative(0x1000, 0x0E80, NackCode::OutOfMemory);
         let bytes = original.to_bytes();
-        let parsed = NegativeAck::parse(&bytes).unwrap();
+        let parsed = DiagnosticAck::parse_negative(&bytes).unwrap();
         assert_eq!(original, parsed);
     }
 }
