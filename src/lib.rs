@@ -15,3 +15,4 @@ pub mod error;
 pub mod server;
 pub mod uds;
 pub use error::DoipError;
+pub use error::DoipResult;

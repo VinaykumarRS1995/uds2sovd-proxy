@@ -196,7 +196,7 @@ impl ServerConfig {
     /// Returns [`DoipError::ConfigFileError`] if file cannot be read or parsed.
     /// Returns [`DoipError::InvalidConfig`] if values are invalid.
     /// Returns [`DoipError::InvalidAddress`] if bind address is malformed.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> std::result::Result<Self, DoipError> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> crate::DoipResult<Self> {
         let content =
             std::fs::read_to_string(path).map_err(|e| DoipError::ConfigFileError(e.to_string()))?;
         let file: ConfigFile =
@@ -234,7 +234,7 @@ impl ServerConfig {
         })
     }
 
-    fn parse_vin(s: &str) -> std::result::Result<[u8; 17], DoipError> {
+    fn parse_vin(s: &str) -> crate::DoipResult<[u8; 17]> {
         let bytes = s.as_bytes();
         if bytes.len() != 17 {
             return Err(DoipError::InvalidConfig(format!(
@@ -247,7 +247,7 @@ impl ServerConfig {
         Ok(vin)
     }
 
-    fn parse_hex_array<const N: usize>(s: &str) -> std::result::Result<[u8; N], DoipError> {
+    fn parse_hex_array<const N: usize>(s: &str) -> crate::DoipResult<[u8; N]> {
         let s = s.trim_start_matches("0x").replace([':', '-', ' '], "");
         let bytes = hex::decode(&s).map_err(|e| DoipError::HexDecodeError(e.to_string()))?;
         if bytes.len() != N {
@@ -378,23 +378,20 @@ mod tests {
 
     #[test]
     fn test_parse_hex_array_valid() {
-        let result: std::result::Result<[u8; 6], DoipError> =
-            ServerConfig::parse_hex_array("00:1A:2B:3C:4D:5E");
+        let result: crate::DoipResult<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B:3C:4D:5E");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E]);
     }
 
     #[test]
     fn test_parse_hex_array_with_0x_prefix() {
-        let result: std::result::Result<[u8; 6], DoipError> =
-            ServerConfig::parse_hex_array("0x001A2B3C4D5E");
+        let result: crate::DoipResult<[u8; 6]> = ServerConfig::parse_hex_array("0x001A2B3C4D5E");
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_parse_hex_array_invalid_length() {
-        let result: std::result::Result<[u8; 6], DoipError> =
-            ServerConfig::parse_hex_array("00:1A:2B");
+        let result: crate::DoipResult<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B");
         assert!(result.is_err());
     }
 

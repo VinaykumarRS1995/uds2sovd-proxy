@@ -12,9 +12,9 @@
  */
 //! Routing Activation handlers (ISO 13400-2:2019)
 
-use super::{DoipParseable, DoipSerializable, check_min_len, parse_fixed_slice};
+use super::{DoipParseable, DoipSerializable, parse_fixed_slice};
 use crate::DoipError;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, BytesMut};
 use tracing::warn;
 
 /// Routing activation response codes per ISO 13400-2:2019 Table 25.
@@ -141,34 +141,6 @@ impl Request {
     pub fn oem_specific(&self) -> Option<u32> {
         self.oem_specific
     }
-
-    /// Parse routing activation request from buffer
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the buffer is too short or contains invalid data.
-    pub fn parse_buf(buf: &mut Bytes) -> std::result::Result<Self, DoipError> {
-        check_min_len(buf.as_ref(), Self::MIN_LEN)?;
-
-        let source_address = buf.get_u16();
-        let activation_type = ActivationType::try_from(buf.get_u8()).map_err(|e| {
-            warn!("RoutingActivation Request parse_buf: {}", e);
-            e
-        })?;
-        let reserved = buf.get_u32();
-        let oem_specific = if buf.remaining() >= 4 {
-            Some(buf.get_u32())
-        } else {
-            None
-        };
-
-        Ok(Self {
-            source_address,
-            activation_type,
-            reserved,
-            oem_specific,
-        })
-    }
 }
 
 // Routing Activation Response - 9 bytes min, 13 with OEM data
@@ -247,7 +219,7 @@ impl Response {
 }
 
 impl DoipParseable for Request {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
+    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
         let header: [u8; Self::MIN_LEN] = parse_fixed_slice(payload, "RoutingActivation Request")?;
 
         let source_address = u16::from_be_bytes([header[0], header[1]]);
@@ -272,7 +244,7 @@ impl DoipParseable for Request {
 }
 
 impl DoipParseable for Response {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
+    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
         let header: [u8; Self::MIN_LEN] = parse_fixed_slice(payload, "RoutingActivation Response")?;
 
         let tester_address = u16::from_be_bytes([header[0], header[1]]);
