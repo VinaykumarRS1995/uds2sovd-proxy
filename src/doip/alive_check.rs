@@ -12,10 +12,8 @@
  */
 //! Alive Check handlers (ISO 13400-2)
 
-use super::{DoipParseable, DoipSerializable};
-use crate::DoipError;
+use super::{DoipParseable, DoipSerializable, parse_fixed_slice};
 use bytes::{BufMut, BytesMut};
-use tracing::warn;
 
 // Alive Check Request (0x0007) - no payload
 // Server sends this to check if tester is still connected
@@ -23,7 +21,7 @@ use tracing::warn;
 pub struct Request;
 
 impl DoipParseable for Request {
-    fn parse(_payload: &[u8]) -> std::result::Result<Self, DoipError> {
+    fn parse(_payload: &[u8]) -> crate::DoipResult<Self> {
         Ok(Self)
     }
 }
@@ -44,19 +42,8 @@ pub struct Response {
 }
 
 impl DoipParseable for Response {
-    fn parse(payload: &[u8]) -> std::result::Result<Self, DoipError> {
-        let bytes: [u8; 2] = payload
-            .get(..Self::LEN)
-            .and_then(|s| s.try_into().ok())
-            .ok_or_else(|| {
-                let e = DoipError::PayloadTooShort {
-                    expected: Self::LEN,
-                    actual: payload.len(),
-                };
-                warn!("AliveCheck Response parse failed: {}", e);
-                e
-            })?;
-
+    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+        let bytes: [u8; 2] = parse_fixed_slice(payload, "AliveCheck Response")?;
         let source_address = u16::from_be_bytes(bytes);
         Ok(Self { source_address })
     }

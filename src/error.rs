@@ -71,36 +71,13 @@ pub enum DoipError {
 
     #[error("diagnostic message has no user data")]
     EmptyUserData,
-
-    #[error("invalid VIN length: expected 17, got {0}")]
-    InvalidVinLength(usize),
-
-    #[error("invalid EID length: expected 6, got {0}")]
-    InvalidEidLength(usize),
-
-    #[error("Message too large: {size} bytes (max: {max})")]
-    MessageTooLarge { size: usize, max: usize },
-
-    #[error("Routing activation failed: {message}")]
-    RoutingActivationFailed { code: u8, message: String },
-
-    #[error("Session not found")]
-    SessionNotFound,
-
-    #[error("Session closed")]
-    SessionClosed,
-
-    #[error("Timeout: {0}")]
-    Timeout(String),
-
-    #[error("UDS error: service 0x{service:02X}, NRC 0x{nrc:02X}")]
-    UdsError { service: u8, nrc: u8 },
 }
 
+#[cfg(test)]
 /// UDS Negative Response Codes (ISO 14229-1:2020)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum UdsNrc {
+enum UdsNrc {
     GeneralReject = 0x10,
     ServiceNotSupported = 0x11,
     SubFunctionNotSupported = 0x12,
@@ -117,9 +94,10 @@ pub enum UdsNrc {
     ServiceNotSupportedInActiveSession = 0x7F,
 }
 
+#[cfg(test)]
 impl UdsNrc {
     #[must_use]
-    pub const fn as_u8(self) -> u8 {
+    const fn as_u8(self) -> u8 {
         self as u8
     }
 }
@@ -222,26 +200,12 @@ mod tests {
             },
             DoipError::InvalidHeader("bad header".to_string()),
             DoipError::UnknownPayloadType(0x1234),
-            DoipError::MessageTooLarge { size: 10, max: 1 },
-            DoipError::RoutingActivationFailed {
-                code: 0x00,
-                message: "fail".to_string(),
-            },
-            DoipError::SessionNotFound,
-            DoipError::SessionClosed,
-            DoipError::Timeout("timeout".to_string()),
-            DoipError::UdsError {
-                service: 0x10,
-                nrc: 0x11,
-            },
             DoipError::PayloadTooShort {
                 expected: 8,
                 actual: 4,
             },
             DoipError::UnknownRoutingActivationResponseCode(0x99),
             DoipError::EmptyUserData,
-            DoipError::InvalidVinLength(10),
-            DoipError::InvalidEidLength(4),
         ];
 
         for err in errors {
