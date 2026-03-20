@@ -13,17 +13,34 @@
 //!
 //! This module provides the core `DoIP` protocol types and codec for TCP/UDP communication.
 
+/// Alive Check request/response handlers (ISO 13400-2:2019 §7.6).
 pub mod alive_check;
+/// Tokio codec framing for DoIP TCP streams.
 pub mod codec;
+/// Diagnostic Message request and acknowledgment handlers (ISO 13400-2:2019 §7.9).
 pub mod diagnostic_message;
+/// DoIP header parsing, validation, and serialization.
 pub mod header;
+/// DoIP payload type enumeration and dispatch.
 pub mod payload;
+/// Routing Activation request/response handlers (ISO 13400-2:2019 §7.7).
 pub mod routing_activation;
+/// Vehicle Identification request/response handlers (ISO 13400-2:2019 §7.5).
 pub mod vehicle_id;
 
-use crate::DoipError;
+// Re-export core types and constants for convenient access.
+// Constants are exported to allow external testing and custom DoIP message construction.
 use bytes::{Bytes, BytesMut};
-use tracing::warn;
+pub use codec::DoipCodec;
+pub use header::{
+    DEFAULT_PROTOCOL_VERSION, DEFAULT_PROTOCOL_VERSION_INV, DOIP_HEADER_LENGTH,
+    DOIP_HEADER_VERSION_MASK, DOIP_VERSION_DEFAULT, DoipHeader, DoipMessage, GenericNackCode,
+    MAX_DOIP_MESSAGE_SIZE, PROTOCOL_VERSION_V1, PROTOCOL_VERSION_V3, PayloadType,
+};
+pub use payload::DoipPayload;
+use tracing::error;
+
+use crate::DoipError;
 
 /// Trait for `DoIP` message types that can be parsed from a raw payload slice.
 ///
@@ -34,7 +51,7 @@ pub trait DoipParseable: Sized {
     ///
     /// # Errors
     /// Returns [`DoipError`] if the payload is malformed or too short.
-    fn parse(payload: &[u8]) -> crate::DoipResult<Self>;
+    fn parse(payload: &[u8]) -> crate::Result<Self>;
 }
 
 /// Trait for `DoIP` message types that can be serialized to a [`Bytes`] buffer.
@@ -46,10 +63,14 @@ pub trait DoipSerializable {
     /// Write the serialized wire-format bytes into `buf`.
     fn write_to(&self, buf: &mut BytesMut);
 
-    /// Return the exact serialized byte count, if known without encoding.
+    /// Returns `Some(n)` when the size is known ahead of serialization,
+    /// enabling [`to_bytes`] to pre-allocate the buffer and avoid incremental
+    /// `BytesMut` reallocations for large messages.
     ///
-    /// Override this to enable pre-allocated buffers in [`to_bytes`], avoiding
-    /// incremental `BytesMut` reallocations for large messages.
+    /// Returns `None` (the default) to indicate the size is not known in
+    /// advance; [`to_bytes`] will then use a dynamically-growing buffer.
+    /// Override this in your implementation whenever the encoded length is
+    /// computable upfront.
     fn serialized_len(&self) -> Option<usize> {
         None
     }
@@ -76,7 +97,7 @@ pub(crate) fn too_short(payload: &[u8], expected: usize) -> DoipError {
 }
 
 /// Return `Err` if `payload` is shorter than `expected` bytes.
-pub(crate) fn check_min_len(payload: &[u8], expected: usize) -> crate::DoipResult<()> {
+pub(crate) fn check_min_len(payload: &[u8], expected: usize) -> crate::Result<()> {
     if payload.len() < expected {
         Err(too_short(payload, expected))
     } else {
@@ -86,28 +107,18 @@ pub(crate) fn check_min_len(payload: &[u8], expected: usize) -> crate::DoipResul
 
 /// Extract the first `N` bytes of `payload` as a fixed-size array.
 ///
-/// Logs a warning and returns [`DoipError::PayloadTooShort`] when the slice
+/// Logs an error and returns [`DoipError::PayloadTooShort`] when the slice
 /// is shorter than `N` bytes, using `context` to identify the call site in the log.
 pub(crate) fn parse_fixed_slice<const N: usize>(
     payload: &[u8],
     context: &str,
-) -> crate::DoipResult<[u8; N]> {
+) -> crate::Result<[u8; N]> {
     payload
         .get(..N)
         .and_then(|s| s.try_into().ok())
         .ok_or_else(|| {
             let e = too_short(payload, N);
-            warn!("{} parse failed: {}", context, e);
+            error!(context, error = %e, "parse failed");
             e
         })
 }
-
-// Re-export core types and constants for convenient access.
-// Constants are exported to allow external testing and custom DoIP message construction.
-pub use codec::DoipCodec;
-pub use header::{
-    DEFAULT_PROTOCOL_VERSION, DEFAULT_PROTOCOL_VERSION_INV, DOIP_HEADER_LENGTH,
-    DOIP_HEADER_VERSION_MASK, DOIP_VERSION_DEFAULT, DoipHeader, DoipMessage, GenericNackCode,
-    MAX_DOIP_MESSAGE_SIZE, PROTOCOL_VERSION_V1, PROTOCOL_VERSION_V3, PayloadType,
-};
-pub use payload::DoipPayload;

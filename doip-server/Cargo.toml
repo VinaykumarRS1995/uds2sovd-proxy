@@ -20,8 +20,14 @@ tokio = { version = "1", default-features = false, features = ["io-util"] }
 tokio-util = { version = "0.7", default-features = false, features = ["codec"] }
 
 # ---- serialization ----
-serde = { version = "1.0", default-features = false, features = ["std", "derive"] }
-toml = { version = "0.9", default-features = false, features = ["parse", "serde"] }
+serde = { version = "1.0", default-features = false, features = [
+  "std",
+  "derive",
+] }
+toml = { version = "0.9", default-features = false, features = [
+  "parse",
+  "serde",
+] }
 
 # ---- tracing & logging ----
 tracing = { version = "0.1", default-features = false, features = ["std"] }

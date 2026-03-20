@@ -12,10 +12,16 @@
  */
 //! Session management for `DoIP` connections
 
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+
 use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
 use tracing::debug;
 
 /// Session states per ISO 13400-2:2019 connection lifecycle
@@ -51,12 +57,10 @@ impl Session {
         }
     }
 
-    /// Transition this session to [`SessionState::RoutingActive`] and record the tester's logical address.
+    /// Transition this session to [`SessionState::RoutingActive`] and record
+    /// the tester's logical address.
     pub fn activate_routing(&mut self, tester_address: u16) {
-        debug!(
-            "Session {} routing activated: tester_address=0x{:04X}",
-            self.id, tester_address
-        );
+        debug!(session_id = self.id, tester_address, "routing activated");
         self.tester_address = tester_address;
         self.state = SessionState::RoutingActive;
     }
@@ -94,14 +98,25 @@ impl Session {
 
 /// Thread-safe registry of active `DoIP` sessions.
 ///
-/// Internally uses `parking_lot::RwLock` maps keyed by session ID and
-/// remote [`SocketAddr`]. Access this via the [`Arc`] returned by
-/// [`SessionManager::new`].
+/// The mutable session state is held in a single [`RwLock`]-protected `Inner`
+/// struct for atomic multi-map updates, while the monotonic ID counter uses
+/// an [`AtomicU64`] to avoid taking the write-lock just to mint a new ID.
+/// Access this via the [`Arc`] returned by [`SessionManager::new`].
+#[derive(Debug, Default)]
+struct SessionManagerInner {
+    sessions: HashMap<u64, Session>,
+    addr_to_session: HashMap<SocketAddr, u64>,
+}
+
+/// Thread-safe registry of active `DoIP` tester sessions.
+///
+/// Uses a single [`RwLock`] over [`SessionManagerInner`] to ensure atomic consistency
+/// between the session map and the address-to-ID index, plus a lock-free [`AtomicU64`]
+/// counter for session ID allocation.
 #[derive(Debug, Default)]
 pub struct SessionManager {
-    sessions: RwLock<HashMap<u64, Session>>,
-    addr_to_session: RwLock<HashMap<SocketAddr, u64>>,
-    next_id: RwLock<u64>,
+    inner: RwLock<SessionManagerInner>,
+    next_id: AtomicU64,
 }
 
 impl SessionManager {
@@ -113,27 +128,25 @@ impl SessionManager {
 
     /// Register a new session for `peer_addr` and return it.
     pub fn create_session(&self, peer_addr: SocketAddr) -> Session {
-        let mut next_id = self.next_id.write();
-        let id = *next_id;
-        *next_id = next_id.saturating_add(1);
-
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let session = Session::new(id, peer_addr);
-        self.sessions.write().insert(id, session.clone());
-        self.addr_to_session.write().insert(peer_addr, id);
-
-        debug!("Session {} created for {}", id, peer_addr);
+        let mut inner = self.inner.write();
+        inner.sessions.insert(id, session.clone());
+        inner.addr_to_session.insert(peer_addr, id);
+        debug!(session_id = id, peer = %peer_addr, "Session created");
         session
     }
 
     /// Look up a session by its numeric ID. Returns `None` if not found.
     pub fn get_session(&self, id: u64) -> Option<Session> {
-        self.sessions.read().get(&id).cloned()
+        self.inner.read().sessions.get(&id).cloned()
     }
 
     /// Look up a session by the tester's remote address. Returns `None` if not found.
     pub fn get_session_by_addr(&self, addr: &SocketAddr) -> Option<Session> {
-        let id = self.addr_to_session.read().get(addr).copied()?;
-        self.get_session(id)
+        let inner = self.inner.read();
+        let id = inner.addr_to_session.get(addr).copied()?;
+        inner.sessions.get(&id).cloned()
     }
 
     /// Apply a mutation `f` to the session with the given `id`. Returns `true` if found.
@@ -141,7 +154,7 @@ impl SessionManager {
     where
         F: FnOnce(&mut Session),
     {
-        if let Some(session) = self.sessions.write().get_mut(&id) {
+        if let Some(session) = self.inner.write().sessions.get_mut(&id) {
             f(session);
             true
         } else {
@@ -151,29 +164,32 @@ impl SessionManager {
 
     /// Remove and return the session with the given `id`, or `None` if not found.
     pub fn remove_session(&self, id: u64) -> Option<Session> {
-        let session = self.sessions.write().remove(&id)?;
-        self.addr_to_session.write().remove(&session.peer_addr);
-        debug!("Session {} removed (peer: {})", id, session.peer_addr);
+        let mut inner = self.inner.write();
+        let session = inner.sessions.remove(&id)?;
+        inner.addr_to_session.remove(&session.peer_addr);
+        debug!(session_id = id, peer = %session.peer_addr, "Session removed");
         Some(session)
     }
 
     /// Remove and return the session associated with `addr`, or `None` if not found.
     pub fn remove_session_by_addr(&self, addr: &SocketAddr) -> Option<Session> {
-        let id = self.addr_to_session.write().remove(addr)?;
-        let session = self.sessions.write().remove(&id)?;
-        debug!("Session {} removed by addr (peer: {})", id, addr);
+        let mut inner = self.inner.write();
+        let id = inner.addr_to_session.remove(addr)?;
+        let session = inner.sessions.remove(&id)?;
+        debug!(session_id = id, peer = %addr, "Session removed by addr");
         Some(session)
     }
 
     /// Returns the number of currently registered sessions.
     pub fn session_count(&self) -> usize {
-        self.sessions.read().len()
+        self.inner.read().sessions.len()
     }
 
     /// Returns `true` if any active session has `tester_address` registered with routing active.
     pub fn is_tester_registered(&self, tester_address: u16) -> bool {
-        self.sessions
+        self.inner
             .read()
+            .sessions
             .values()
             .any(|s| s.tester_address == tester_address && s.state == SessionState::RoutingActive)
     }

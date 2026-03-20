@@ -10,9 +10,12 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+/// Core DoIP protocol types, codec, and wire-format handlers (ISO 13400-2:2019).
 pub mod doip;
+/// Error types and the crate-level [`Result`] alias.
 pub mod error;
+/// DoIP server configuration and session management.
 pub mod server;
+/// UDS service layer – bridges DoIP transport to ISO 14229-1 request/response handling.
 pub mod uds;
-pub use error::DoipError;
-pub use error::DoipResult;
+pub use error::{DoipError, Result};

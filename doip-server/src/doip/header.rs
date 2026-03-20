@@ -186,7 +186,7 @@ impl DoipHeader {
     ///
     /// # Errors
     /// Returns [`crate::DoipError::InvalidHeader`] if data is less than 8 bytes.
-    pub(crate) fn parse(data: &[u8]) -> crate::DoipResult<Self> {
+    pub(crate) fn parse(data: &[u8]) -> crate::Result<Self> {
         let header: [u8; DOIP_HEADER_LENGTH] = data
             .get(..DOIP_HEADER_LENGTH)
             .and_then(|s| s.try_into().ok())
@@ -206,10 +206,16 @@ impl DoipHeader {
         })
     }
 
+    /// Validate the `DoIP` header against ISO 13400-2:2019 rules.
+    ///
+    /// Returns `None` if valid, or the `GenericNackCode` describing the first violation.
     pub fn validate(&self) -> Option<GenericNackCode> {
         debug!(
-            "Validating DoIP header: version=0x{:02X}, inverse=0x{:02X}, type=0x{:04X}, len={}",
-            self.version, self.inverse_version, self.payload_type, self.payload_length
+            version = format!("0x{:02X}", self.version),
+            inverse_version = format!("0x{:02X}", self.inverse_version),
+            payload_type = format!("0x{:04X}", self.payload_type),
+            payload_length = self.payload_length,
+            "validating DoIP header"
         );
 
         // Accept DoIP protocol versions V1, V2, V3 (and wildcard 0xFF for default/any)
@@ -222,29 +228,32 @@ impl DoipHeader {
                 | DOIP_VERSION_DEFAULT
         );
         if !valid_version {
-            warn!("Invalid DoIP version: 0x{:02X}", self.version);
+            warn!(version = self.version, "Invalid DoIP version");
             return Some(GenericNackCode::IncorrectPatternFormat);
         }
 
         // Check version XOR inverse_version == DOIP_HEADER_VERSION_MASK (0xFF)
         if self.version ^ self.inverse_version != DOIP_HEADER_VERSION_MASK {
             warn!(
-                "Version/inverse mismatch: 0x{:02X} ^ 0x{:02X} = 0x{:02X} (expected 0x{:02X})",
-                self.version,
-                self.inverse_version,
-                self.version ^ self.inverse_version,
-                DOIP_HEADER_VERSION_MASK,
+                version = self.version,
+                inverse_version = self.inverse_version,
+                expected_mask = DOIP_HEADER_VERSION_MASK,
+                "Version/inverse mismatch"
             );
             return Some(GenericNackCode::IncorrectPatternFormat);
         }
 
         let Some(payload_type) = PayloadType::try_from(self.payload_type).ok() else {
-            warn!("Unknown payload type: 0x{:04X}", self.payload_type);
+            warn!(payload_type = self.payload_type, "Unknown payload type");
             return Some(GenericNackCode::UnknownPayloadType);
         };
 
         if self.payload_length > MAX_DOIP_MESSAGE_SIZE {
-            warn!("Message too large: {} bytes", self.payload_length);
+            warn!(
+                payload_length = self.payload_length,
+                max = MAX_DOIP_MESSAGE_SIZE,
+                "Message too large"
+            );
             return Some(GenericNackCode::MessageTooLarge);
         }
         let Ok(payload_len_usize) = usize::try_from(self.payload_length) else {
@@ -252,10 +261,10 @@ impl DoipHeader {
         };
         if payload_len_usize < payload_type.min_payload_length() {
             warn!(
-                "Payload too short for {:?}: {} < {}",
-                payload_type,
-                self.payload_length,
-                payload_type.min_payload_length()
+                payload_type = ?payload_type,
+                payload_length = self.payload_length,
+                min_length = payload_type.min_payload_length(),
+                "Payload too short for payload type"
             );
             return Some(GenericNackCode::InvalidPayloadLength);
         }
@@ -263,6 +272,7 @@ impl DoipHeader {
         None
     }
 
+    /// Returns `true` if [`validate`](Self::validate) finds no errors in this header.
     #[must_use]
     pub fn is_valid(&self) -> bool {
         self.validate().is_none()
@@ -286,6 +296,7 @@ impl DoipHeader {
         buf.freeze()
     }
 
+    /// Write the 8-byte `DoIP` header into `buf`.
     pub fn write_to(&self, buf: &mut BytesMut) {
         buf.put_u8(self.version);
         buf.put_u8(self.inverse_version);
@@ -368,10 +379,14 @@ impl DoipMessage {
         }
     }
 
-    /// Create a DoIP message with a raw (unparsed) payload type
+    /// Create a `DoIP` message with a raw (unparsed) payload type.
     ///
     /// This is primarily used for testing unknown/invalid payload types.
     /// Production code should use `new()` or `with_version()` instead.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `payload.len()` exceeds `u32::MAX`.
     #[cfg(test)]
     pub fn with_raw_payload_type(payload_type: u16, payload: Bytes) -> Self {
         Self {
@@ -385,6 +400,7 @@ impl DoipMessage {
         }
     }
 
+    /// Returns the decoded `PayloadType`, or `None` if the raw value is not a known type.
     pub fn payload_type(&self) -> Option<PayloadType> {
         PayloadType::try_from(self.header.payload_type).ok()
     }
@@ -405,6 +421,7 @@ impl DoipMessage {
         DOIP_HEADER_LENGTH.saturating_add(self.payload.len())
     }
 
+    /// Serialize the full `DoIP` message (header + payload) into a `Bytes` buffer.
     pub fn to_bytes(&self) -> Bytes {
         let mut buf = BytesMut::with_capacity(self.message_length());
         self.header.write_to(&mut buf);
@@ -418,10 +435,12 @@ impl DoipMessage {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
+    use tokio_util::codec::{Decoder, Encoder};
+
     use super::*;
     use crate::doip::codec::DoipCodec;
-    use tokio_util::codec::{Decoder, Encoder};
 
     // --- Helper to build a valid DoIP header quickly ---
     fn make_header(payload_type: u16, payload_len: u32) -> DoipHeader {
@@ -571,10 +590,10 @@ mod tests {
     #[test]
     fn payload_type_gaps_return_none() {
         // These are in gaps between valid ranges
-        assert!(PayloadType::try_from(0x0009_u16).is_err());
-        assert!(PayloadType::try_from(0x4000_u16).is_err());
-        assert!(PayloadType::try_from(0x8000_u16).is_err());
-        assert!(PayloadType::try_from(0xFFFF_u16).is_err());
+        assert!(PayloadType::try_from(0x0009u16).is_err());
+        assert!(PayloadType::try_from(0x4000u16).is_err());
+        assert!(PayloadType::try_from(0x8000u16).is_err());
+        assert!(PayloadType::try_from(0xFFFFu16).is_err());
     }
 
     #[test]

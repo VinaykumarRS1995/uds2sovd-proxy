@@ -13,10 +13,11 @@
 
 //! `DoIP` Server Configuration
 
-use crate::DoipError;
+use std::{net::SocketAddr, path::Path};
+
 use serde::Deserialize;
-use std::net::SocketAddr;
-use std::path::Path;
+
+use crate::DoipError;
 
 // ============================================================================
 // Default Configuration Constants (per ISO 13400-2 DoIP specification)
@@ -196,7 +197,7 @@ impl ServerConfig {
     /// Returns [`DoipError::ConfigFileError`] if file cannot be read or parsed.
     /// Returns [`DoipError::InvalidConfig`] if values are invalid.
     /// Returns [`DoipError::InvalidAddress`] if bind address is malformed.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> crate::DoipResult<Self> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> crate::Result<Self> {
         let content =
             std::fs::read_to_string(path).map_err(|e| DoipError::ConfigFileError(e.to_string()))?;
         let file: ConfigFile =
@@ -234,7 +235,7 @@ impl ServerConfig {
         })
     }
 
-    fn parse_vin(s: &str) -> crate::DoipResult<[u8; 17]> {
+    fn parse_vin(s: &str) -> crate::Result<[u8; 17]> {
         let bytes = s.as_bytes();
         if bytes.len() != 17 {
             return Err(DoipError::InvalidConfig(format!(
@@ -247,7 +248,7 @@ impl ServerConfig {
         Ok(vin)
     }
 
-    fn parse_hex_array<const N: usize>(s: &str) -> crate::DoipResult<[u8; N]> {
+    fn parse_hex_array<const N: usize>(s: &str) -> crate::Result<[u8; N]> {
         let s = s.trim_start_matches("0x").replace([':', '-', ' '], "");
         let bytes = hex::decode(&s).map_err(|e| DoipError::HexDecodeError(e.to_string()))?;
         if bytes.len() != N {
@@ -262,12 +263,14 @@ impl ServerConfig {
         Ok(arr)
     }
 
+    /// Override the VIN advertised in Vehicle Identification Responses.
     #[must_use]
     pub fn with_vin(mut self, vin: [u8; 17]) -> Self {
         self.vin = vin;
         self
     }
 
+    /// Override the TCP and UDP bind addresses (default: `0.0.0.0:13400`).
     #[must_use]
     pub fn with_addresses(mut self, tcp: SocketAddr, udp: SocketAddr) -> Self {
         self.tcp_addr = tcp;
@@ -378,20 +381,20 @@ mod tests {
 
     #[test]
     fn test_parse_hex_array_valid() {
-        let result: crate::DoipResult<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B:3C:4D:5E");
+        let result: crate::Result<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B:3C:4D:5E");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E]);
     }
 
     #[test]
     fn test_parse_hex_array_with_0x_prefix() {
-        let result: crate::DoipResult<[u8; 6]> = ServerConfig::parse_hex_array("0x001A2B3C4D5E");
+        let result: crate::Result<[u8; 6]> = ServerConfig::parse_hex_array("0x001A2B3C4D5E");
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_parse_hex_array_invalid_length() {
-        let result: crate::DoipResult<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B");
+        let result: crate::Result<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B");
         assert!(result.is_err());
     }
 
