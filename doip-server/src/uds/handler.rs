@@ -21,20 +21,35 @@ use bytes::Bytes;
 
 /// UDS Service IDs (ISO 14229-1:2020)
 pub mod service_id {
+    /// Diagnostic Session Control (0x10) – switch the ECU into a specific diagnostic session.
     pub const DIAGNOSTIC_SESSION_CONTROL: u8 = 0x10;
+    /// ECU Reset (0x11) – request the ECU to perform a hard, soft, or key-off-on reset.
     pub const ECU_RESET: u8 = 0x11;
+    /// Security Access (0x27) – seed/key challenge-response to unlock protected services.
     pub const SECURITY_ACCESS: u8 = 0x27;
+    /// Communication Control (0x28) – enable or disable specific ECU communication paths.
     pub const COMMUNICATION_CONTROL: u8 = 0x28;
+    /// Tester Present (0x3E) – keep the active diagnostic session alive.
     pub const TESTER_PRESENT: u8 = 0x3E;
+    /// Control DTC Setting (0x85) – enable or disable DTC storage in the ECU.
     pub const CONTROL_DTC_SETTING: u8 = 0x85;
+    /// Read Data By Identifier (0x22) – read one or more data records by their 2-byte identifier.
     pub const READ_DATA_BY_IDENTIFIER: u8 = 0x22;
+    /// Write Data By Identifier (0x2E) – write a data record by its 2-byte identifier.
     pub const WRITE_DATA_BY_IDENTIFIER: u8 = 0x2E;
+    /// Routine Control (0x31) – start, stop, or query the result of an ECU routine.
     pub const ROUTINE_CONTROL: u8 = 0x31;
+    /// Request Download (0x34) – initiate a data download transfer to the ECU.
     pub const REQUEST_DOWNLOAD: u8 = 0x34;
+    /// Request Upload (0x35) – initiate a data upload transfer from the ECU.
     pub const REQUEST_UPLOAD: u8 = 0x35;
+    /// Transfer Data (0x36) – transfer a block of data during an active download or upload.
     pub const TRANSFER_DATA: u8 = 0x36;
+    /// Request Transfer Exit (0x37) – terminate an active download or upload transfer.
     pub const REQUEST_TRANSFER_EXIT: u8 = 0x37;
+    /// Read DTC Information (0x19) – read Diagnostic Trouble Code data from the ECU.
     pub const READ_DTC_INFORMATION: u8 = 0x19;
+    /// Clear DTC Information (0x14) – erase stored DTCs and associated snapshot data.
     pub const CLEAR_DTC_INFORMATION: u8 = 0x14;
 }
 
@@ -141,8 +156,9 @@ pub trait UdsHandler: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bytes::Bytes;
+
+    use super::*;
 
     #[test]
     fn uds_request_service_id() {

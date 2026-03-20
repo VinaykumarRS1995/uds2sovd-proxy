@@ -22,8 +22,9 @@
 //!
 //! See [`header`](super::header) for the underlying type definitions.
 
-use bytes::BytesMut;
 use std::io;
+
+use bytes::BytesMut;
 use tokio_util::codec::{Decoder, Encoder};
 use tracing::{debug, warn};
 
@@ -51,6 +52,7 @@ pub struct DoipCodec {
 }
 
 impl DoipCodec {
+    /// Create a new `DoipCodec` with the default maximum payload size.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -99,15 +101,16 @@ impl Decoder for DoipCodec {
                     let header_slice = src.get(..DOIP_HEADER_LENGTH).ok_or_else(|| {
                         io::Error::new(io::ErrorKind::InvalidData, "buffer too short")
                     })?;
-                    debug!("Received raw header bytes: {:02X?}", header_slice);
+                    debug!(header_bytes = ?header_slice, "Received raw header bytes");
 
                     let header = DoipHeader::parse(header_slice)
                         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
                     if let Some(nack_code) = header.validate() {
                         warn!(
-                            "Header validation failed: {:?} - raw bytes: {:02X?}",
-                            nack_code, header_slice
+                            nack_code = ?nack_code,
+                            header_bytes = ?header_slice,
+                            "Header validation failed"
                         );
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidData,
@@ -147,7 +150,9 @@ impl Decoder for DoipCodec {
                     }
 
                     let _ = src.split_to(DOIP_HEADER_LENGTH);
-                    let payload = src.split_to(total_len - DOIP_HEADER_LENGTH).freeze();
+                    let payload = src
+                        .split_to(total_len.saturating_sub(DOIP_HEADER_LENGTH))
+                        .freeze();
 
                     self.state = DecodeState::Header;
                     return Ok(Some(DoipMessage { header, payload }));

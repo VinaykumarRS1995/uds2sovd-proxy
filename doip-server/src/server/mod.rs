@@ -14,7 +14,9 @@
 //!
 //! `DoIP` server configuration and session management.
 
+/// DoIP server configuration (addresses, timeouts, logical address, VIN, EID, GID).
 pub mod config;
+/// Thread-safe session registry for active DoIP tester connections.
 pub mod session;
 
 pub use config::ServerConfig;

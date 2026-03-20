@@ -20,8 +20,8 @@
 //! # Example
 //! ```no_run
 //! # use doip_server::doip::{DoipMessage, DoipPayload};
-//! # use doip_server::DoipResult;
-//! fn dispatch(msg: &DoipMessage) -> DoipResult<()> {
+//! # use doip_server::Result;
+//! fn dispatch(msg: &DoipMessage) -> Result<()> {
 //!     match DoipPayload::parse(msg)? {
 //!         DoipPayload::DiagnosticMessage(m) => println!("UDS payload: {:?}", m),
 //!         DoipPayload::AliveCheckRequest(_) => println!("Alive check received"),
@@ -79,7 +79,7 @@ impl DoipPayload {
     ///
     /// Returns a more specific [`DoipError`] (e.g. [`DoipError::PayloadTooShort`])
     /// when the payload bytes are present but malformed.
-    pub fn parse(msg: &DoipMessage) -> crate::DoipResult<Self> {
+    pub fn parse(msg: &DoipMessage) -> crate::Result<Self> {
         let payload = msg.payload().as_ref();
 
         let payload_type = msg
@@ -168,9 +168,10 @@ impl DoipPayload {
 
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
+
     use super::*;
     use crate::doip::{DoipMessage, PayloadType};
-    use bytes::Bytes;
 
     fn make_msg(payload_type: PayloadType, payload: impl Into<Bytes>) -> DoipMessage {
         DoipMessage::new(payload_type, payload.into())

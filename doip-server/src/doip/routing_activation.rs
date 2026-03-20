@@ -12,10 +12,11 @@
  */
 //! Routing Activation handlers (ISO 13400-2:2019)
 
+use bytes::{BufMut, BytesMut};
+use tracing::error;
+
 use super::{DoipParseable, DoipSerializable, parse_fixed_slice};
 use crate::DoipError;
-use bytes::{BufMut, BytesMut};
-use tracing::warn;
 
 /// Routing activation response codes per ISO 13400-2:2019 Table 25.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,7 +106,11 @@ impl TryFrom<u8> for ActivationType {
     }
 }
 
-// Routing Activation Request - payload is 7 bytes min, 11 with OEM data
+/// Routing Activation Request (payload type `0x0005`) – sent by the tester
+/// to activate a routing path.
+///
+/// # Wire Format
+/// Payload: SA(2) + type(1) + reserved(4) + optional OEM(4)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     source_address: u16,
@@ -115,7 +120,11 @@ pub struct Request {
 }
 
 impl Request {
+    /// Minimum wire-format length of a Routing Activation Request payload
+    /// (7 bytes: SA + type + reserved, without OEM data).
     pub const MIN_LEN: usize = 7;
+    /// Maximum wire-format length of a Routing Activation Request payload
+    /// (11 bytes: includes optional 4-byte OEM data).
     pub const MAX_LEN: usize = 11;
 
     /// Tester logical source address
@@ -143,7 +152,11 @@ impl Request {
     }
 }
 
-// Routing Activation Response - 9 bytes min, 13 with OEM data
+/// Routing Activation Response (payload type `0x0006`) – sent by the `DoIP`
+/// entity to confirm or deny routing.
+///
+/// # Wire Format
+/// Payload: testerAddr(2) + entityAddr(2) + code(1) + reserved(4) + optional OEM(4)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
     tester_address: u16,
@@ -154,7 +167,11 @@ pub struct Response {
 }
 
 impl Response {
+    /// Minimum wire-format length of a Routing Activation Response payload
+    /// (9 bytes: tester addr + entity addr + code + reserved, without OEM data).
     pub const MIN_LEN: usize = 9;
+    /// Maximum wire-format length of a Routing Activation Response payload
+    /// (13 bytes: includes optional 4-byte OEM data).
     pub const MAX_LEN: usize = 13;
 
     /// Build a successful routing activation response.
@@ -219,12 +236,12 @@ impl Response {
 }
 
 impl DoipParseable for Request {
-    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+    fn parse(payload: &[u8]) -> crate::Result<Self> {
         let header: [u8; Self::MIN_LEN] = parse_fixed_slice(payload, "RoutingActivation Request")?;
 
         let source_address = u16::from_be_bytes([header[0], header[1]]);
         let activation_type = ActivationType::try_from(header[2]).map_err(|e| {
-            warn!("RoutingActivation Request parse failed: {}", e);
+            error!(error = %e, "RoutingActivation Request parse failed");
             e
         })?;
         let reserved = u32::from_be_bytes([header[3], header[4], header[5], header[6]]);
@@ -244,13 +261,13 @@ impl DoipParseable for Request {
 }
 
 impl DoipParseable for Response {
-    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+    fn parse(payload: &[u8]) -> crate::Result<Self> {
         let header: [u8; Self::MIN_LEN] = parse_fixed_slice(payload, "RoutingActivation Response")?;
 
         let tester_address = u16::from_be_bytes([header[0], header[1]]);
         let entity_address = u16::from_be_bytes([header[2], header[3]]);
         let response_code = ResponseCode::try_from(header[4]).map_err(|e| {
-            warn!("RoutingActivation Response parse failed: {}", e);
+            error!(error = %e, "RoutingActivation Response parse failed");
             e
         })?;
         let reserved = u32::from_be_bytes([header[5], header[6], header[7], header[8]]);
@@ -272,7 +289,7 @@ impl DoipParseable for Response {
 
 impl DoipSerializable for Response {
     fn serialized_len(&self) -> Option<usize> {
-        Some(Self::MIN_LEN + if self.oem_specific.is_some() { 4 } else { 0 })
+        Some(Self::MIN_LEN.saturating_add(if self.oem_specific.is_some() { 4 } else { 0 }))
     }
 
     fn write_to(&self, buf: &mut BytesMut) {
@@ -287,6 +304,7 @@ impl DoipSerializable for Response {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use crate::doip::{DoipParseable, DoipSerializable};

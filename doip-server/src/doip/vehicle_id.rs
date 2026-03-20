@@ -13,10 +13,11 @@
 
 //! Vehicle Identification handlers (ISO 13400-2:2019)
 
+use bytes::{BufMut, BytesMut};
+use tracing::error;
+
 use super::{DoipParseable, DoipSerializable, check_min_len, parse_fixed_slice, too_short};
 use crate::DoipError;
-use bytes::{BufMut, BytesMut};
-use tracing::warn;
 
 // Wire-format field lengths for VehicleIdentificationResponse (ISO 13400-2:2019)
 const VIN_LEN: usize = 17;
@@ -36,19 +37,26 @@ const GID_END: usize = GID_START + GID_LEN; // 31
 const FURTHER_ACTION_IDX: usize = GID_END; // 31
 const SYNC_STATUS_IDX: usize = FURTHER_ACTION_IDX + FURTHER_ACTION_LEN; // 32
 
-// Vehicle Identification Request (0x0001) - no payload
+/// Vehicle Identification Request (payload type `0x0001`) – broadcast with no filter criteria.
+///
+/// The `DoIP` entity responds with a Vehicle Identification Response containing VIN, EID, and GID.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Request;
 
-// Vehicle Identification Request with EID (0x0002) - 6 byte EID
+/// Vehicle Identification Request filtered by EID (payload type `0x0002`).
+///
+/// Only the `DoIP` entity with a matching 6-byte EID should respond.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestWithEid {
     eid: [u8; 6],
 }
 
 impl RequestWithEid {
+    /// Fixed wire-format length of a Vehicle Identification Request with EID
+    /// payload (6-byte EID filter).
     pub const LEN: usize = 6;
 
+    /// Create a new Vehicle Identification Request filtered by the given 6-byte EID.
     #[must_use]
     pub fn new(eid: [u8; 6]) -> Self {
         Self { eid }
@@ -61,15 +69,19 @@ impl RequestWithEid {
     }
 }
 
-// Vehicle Identification Request with VIN (0x0003) - 17 byte VIN
+/// Vehicle Identification Request filtered by VIN (payload type `0x0003`).
+///
+/// Only the `DoIP` entity with a matching 17-byte VIN should respond.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestWithVin {
     vin: [u8; 17],
 }
 
 impl RequestWithVin {
+    /// Fixed wire-format length of a Vehicle Identification Request with VIN payload (17-byte VIN).
     pub const LEN: usize = 17;
 
+    /// Create a new Vehicle Identification Request filtered by the given 17-byte VIN.
     #[must_use]
     pub fn new(vin: [u8; 17]) -> Self {
         Self { vin }
@@ -81,13 +93,17 @@ impl RequestWithVin {
         &self.vin
     }
 
+    /// The VIN filter value as a UTF-8 string (lossy – non-UTF-8 bytes replaced with `�`).
     #[must_use]
     pub fn vin_string(&self) -> String {
         String::from_utf8_lossy(&self.vin).to_string()
     }
 }
 
-// Further action codes per ISO 13400-2:2019 Table 23
+/// Further action codes per ISO 13400-2:2019 Table 23.
+///
+/// Indicates whether the tester must take additional steps (e.g., routing
+/// activation) after identification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FurtherAction {
@@ -112,7 +128,9 @@ impl From<FurtherAction> for u8 {
     }
 }
 
-// Synchronization status per ISO 13400-2:2019 Table 22
+/// GID synchronization status per ISO 13400-2:2019 Table 22.
+///
+/// Indicates whether the `DoIP` entity's Group ID is synchronized across all ECUs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SyncStatus {
@@ -137,8 +155,12 @@ impl From<SyncStatus> for u8 {
     }
 }
 
-// Vehicle Identification Response (0x0004)
-// VIN(17) + LogicalAddr(2) + EID(6) + GID(6) + FurtherAction(1) = 32 bytes min
+/// Vehicle Identification Response (payload type `0x0004`) – sent by the `DoIP` entity.
+///
+/// Contains VIN, logical address, EID, GID, further action code, and optional sync status.
+///
+/// # Wire Format
+/// VIN(17) + LogicalAddr(2) + EID(6) + GID(6) + FurtherAction(1) + optional SyncStatus(1)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
     vin: [u8; 17],
@@ -150,9 +172,17 @@ pub struct Response {
 }
 
 impl Response {
-    pub const MIN_LEN: usize = SYNC_STATUS_IDX; // 32: VIN(17) + Addr(2) + EID(6) + GID(6) + FurtherAction(1)
-    pub const MAX_LEN: usize = SYNC_STATUS_IDX + 1; // 33: adds optional SyncStatus(1)
+    /// Minimum wire-format length of a Vehicle Identification Response payload
+    /// (32 bytes: VIN(17) + LogicalAddr(2) + EID(6) + GID(6) + FurtherAction(1)).
+    pub const MIN_LEN: usize = SYNC_STATUS_IDX;
+    /// Maximum wire-format length of a Vehicle Identification Response payload
+    /// (33 bytes: adds optional SyncStatus(1)).
+    pub const MAX_LEN: usize = SYNC_STATUS_IDX + 1;
 
+    /// Create a new Vehicle Identification Response with the required fields.
+    ///
+    /// `further_action` defaults to [`FurtherAction::NoFurtherAction`]; use
+    /// [`with_routing_required`](Self::with_routing_required) to override.
     #[must_use]
     pub fn new(vin: [u8; 17], logical_address: u16, eid: [u8; 6], gid: [u8; 6]) -> Self {
         Self {
@@ -165,18 +195,22 @@ impl Response {
         }
     }
 
+    /// Set `FurtherAction` to `RoutingActivationRequired` (ISO 13400-2:2019 Table 23 – 0x10).
     #[must_use]
     pub fn with_routing_required(mut self) -> Self {
         self.further_action = FurtherAction::RoutingActivationRequired;
         self
     }
 
+    /// Attach an optional GID synchronization status byte to the response
+    /// (ISO 13400-2:2019 Table 22).
     #[must_use]
     pub fn with_sync_status(mut self, status: SyncStatus) -> Self {
         self.sync_status = Some(status);
         self
     }
 
+    /// Returns the VIN as a UTF-8 string (lossy – non-UTF-8 bytes replaced with `�`).
     #[must_use]
     pub fn vin_string(&self) -> String {
         String::from_utf8_lossy(&self.vin).to_string()
@@ -184,29 +218,29 @@ impl Response {
 }
 
 impl DoipParseable for Request {
-    fn parse(_payload: &[u8]) -> crate::DoipResult<Self> {
+    fn parse(_payload: &[u8]) -> crate::Result<Self> {
         Ok(Self)
     }
 }
 
 impl DoipParseable for RequestWithEid {
-    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+    fn parse(payload: &[u8]) -> crate::Result<Self> {
         let eid: [u8; 6] = parse_fixed_slice(payload, "VehicleId RequestWithEid")?;
         Ok(Self { eid })
     }
 }
 
 impl DoipParseable for RequestWithVin {
-    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+    fn parse(payload: &[u8]) -> crate::Result<Self> {
         let vin: [u8; 17] = parse_fixed_slice(payload, "VehicleId RequestWithVin")?;
         Ok(Self { vin })
     }
 }
 
 impl DoipParseable for Response {
-    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+    fn parse(payload: &[u8]) -> crate::Result<Self> {
         if let Err(e) = check_min_len(payload, Self::MIN_LEN) {
-            warn!("VehicleId Response parse failed: {}", e);
+            error!(error = %e, "VehicleId Response parse failed");
             return Err(e);
         }
 
@@ -256,7 +290,7 @@ impl DoipParseable for Response {
 
 impl DoipSerializable for Response {
     fn serialized_len(&self) -> Option<usize> {
-        Some(Self::MIN_LEN + usize::from(self.sync_status.is_some()))
+        Some(Self::MIN_LEN.saturating_add(usize::from(self.sync_status.is_some())))
     }
 
     fn write_to(&self, buf: &mut BytesMut) {
@@ -272,6 +306,7 @@ impl DoipSerializable for Response {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use crate::doip::{DoipParseable, DoipSerializable};

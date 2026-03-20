@@ -32,7 +32,9 @@ ignore = []
 # List of explicitly allowed licenses
 # See https://spdx.org/licenses/ for list of possible licenses
 # [possible values: any SPDX 3.11 short identifier (+ optional exception)].
-allow = ["Apache-2.0", "MIT"]
+# Unicode-3.0 is required by `unicode-ident` (transitive dep of serde/thiserror)
+# and is an OSI-approved license covering Unicode data tables.
+allow = ["Apache-2.0", "MIT", "Unicode-3.0"]
 
 confidence-threshold = 0.9
 exceptions = []

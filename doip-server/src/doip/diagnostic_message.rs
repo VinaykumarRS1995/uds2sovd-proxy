@@ -12,10 +12,11 @@
  */
 //! Diagnostic Message handlers (ISO 13400-2:2019)
 
+use bytes::{BufMut, Bytes, BytesMut};
+use tracing::error;
+
 use super::{DoipParseable, DoipSerializable, parse_fixed_slice, too_short};
 use crate::DoipError;
-use bytes::{BufMut, Bytes, BytesMut};
-use tracing::warn;
 
 const ADDRESS_BYTES: usize = 2;
 const HEADER_BYTES: usize = ADDRESS_BYTES * 2;
@@ -106,7 +107,7 @@ impl Message {
         self.source_address
     }
 
-    /// Get the target address  
+    /// Get the target address
     pub fn target_address(&self) -> u16 {
         self.target_address
     }
@@ -116,6 +117,7 @@ impl Message {
         &self.user_data
     }
 
+    /// Returns the UDS service ID (first byte of user data), or `None` if the payload is empty.
     pub fn service_id(&self) -> Option<u8> {
         self.user_data.first().copied()
     }
@@ -190,7 +192,7 @@ impl DiagnosticAck {
     ///
     /// # Errors
     /// Returns [`DoipError::PayloadTooShort`] if payload is less than 4 bytes.
-    pub fn parse_positive(payload: &[u8]) -> crate::DoipResult<Self> {
+    pub fn parse_positive(payload: &[u8]) -> crate::Result<Self> {
         let (source_address, target_address, previous_data) =
             Self::parse_ack_header(payload, "DiagnosticPositiveAck")?;
         Ok(Self {
@@ -206,7 +208,7 @@ impl DiagnosticAck {
     /// # Errors
     /// Returns [`DoipError::PayloadTooShort`] if payload is less than 5 bytes.
     /// Returns [`DoipError::UnknownNackCode`] for unrecognized NACK codes.
-    pub fn parse_negative(payload: &[u8]) -> crate::DoipResult<Self> {
+    pub fn parse_negative(payload: &[u8]) -> crate::Result<Self> {
         let (source_address, target_address, previous_data) =
             Self::parse_ack_header(payload, "DiagnosticNegativeAck")?;
         let nack_code = payload
@@ -223,10 +225,7 @@ impl DiagnosticAck {
     }
 
     /// Parse SA, TA and optional trailing `previous_data` from an ack payload.
-    fn parse_ack_header(
-        payload: &[u8],
-        context: &str,
-    ) -> crate::DoipResult<(u16, u16, Option<Bytes>)> {
+    fn parse_ack_header(payload: &[u8], context: &str) -> crate::Result<(u16, u16, Option<Bytes>)> {
         let header: [u8; HEADER_BYTES] = parse_fixed_slice(payload, context)?;
         let source_address = u16::from_be_bytes([header[0], header[1]]);
         let target_address = u16::from_be_bytes([header[2], header[3]]);
@@ -239,7 +238,7 @@ impl DiagnosticAck {
 }
 
 impl DoipParseable for Message {
-    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+    fn parse(payload: &[u8]) -> crate::Result<Self> {
         let header: [u8; HEADER_BYTES] = parse_fixed_slice(payload, "DiagnosticMessage")?;
 
         let source_address = u16::from_be_bytes([header[0], header[1]]);
@@ -250,12 +249,16 @@ impl DoipParseable for Message {
             .map(Bytes::copy_from_slice)
             .ok_or_else(|| {
                 let e = too_short(payload, Self::MIN_LEN);
-                warn!("DiagnosticMessage parse failed: {}", e);
+                error!(error = %e, "DiagnosticMessage parse failed");
                 e
             })?;
 
         if user_data.is_empty() {
-            warn!("DiagnosticMessage parse failed: empty user data");
+            error!(
+                message_type = "DiagnosticMessage",
+                reason = "empty_user_data",
+                "parse failed"
+            );
             return Err(DoipError::EmptyUserData);
         }
 
@@ -269,7 +272,7 @@ impl DoipParseable for Message {
 
 impl DoipSerializable for Message {
     fn serialized_len(&self) -> Option<usize> {
-        Some(HEADER_BYTES + self.user_data.len())
+        Some(HEADER_BYTES.saturating_add(self.user_data.len()))
     }
 
     fn write_to(&self, buf: &mut BytesMut) {
@@ -281,7 +284,7 @@ impl DoipSerializable for Message {
 
 impl DoipSerializable for DiagnosticAck {
     fn serialized_len(&self) -> Option<usize> {
-        Some(Self::MIN_LEN + self.previous_data.as_ref().map_or(0, bytes::Bytes::len))
+        Some(Self::MIN_LEN.saturating_add(self.previous_data.as_ref().map_or(0, bytes::Bytes::len)))
     }
 
     fn write_to(&self, buf: &mut BytesMut) {
@@ -298,6 +301,7 @@ impl DoipSerializable for DiagnosticAck {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use crate::doip::{DoipParseable, DoipSerializable};

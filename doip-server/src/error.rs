@@ -12,17 +12,18 @@
  */
 //! Error Types for `DoIP` Server (ISO 13400-2:2019 & ISO 14229-1:2020)
 
-use std::io;
-use std::net::AddrParseError;
+use std::{io, net::AddrParseError};
+
 use thiserror::Error;
 
 // Re-export from the canonical definitions in the protocol modules
 pub use crate::doip::diagnostic_message::NackCode as DiagnosticNackCode;
-pub use crate::doip::header::GenericNackCode;
-pub use crate::doip::routing_activation::ResponseCode as RoutingActivationCode;
+pub use crate::doip::{
+    header::GenericNackCode, routing_activation::ResponseCode as RoutingActivationCode,
+};
 
 /// Result type alias for `DoIP` operations
-pub type DoipResult<T> = std::result::Result<T, DoipError>;
+pub type Result<T> = std::result::Result<T, DoipError>;
 
 /// Main `DoIP` Error type
 #[derive(Error, Debug)]

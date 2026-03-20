@@ -12,16 +12,19 @@
  */
 //! Alive Check handlers (ISO 13400-2)
 
-use super::{DoipParseable, DoipSerializable, parse_fixed_slice};
 use bytes::{BufMut, BytesMut};
 
-// Alive Check Request (0x0007) - no payload
-// Server sends this to check if tester is still connected
+use super::{DoipParseable, DoipSerializable, parse_fixed_slice};
+
+/// Alive Check Request (payload type `0x0007`) – sent by the `DoIP` entity to verify
+/// a tester is still connected.
+///
+/// This message carries no payload (zero-length body per ISO 13400-2:2019 §7.6).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Request;
 
 impl DoipParseable for Request {
-    fn parse(_payload: &[u8]) -> crate::DoipResult<Self> {
+    fn parse(_payload: &[u8]) -> crate::Result<Self> {
         Ok(Self)
     }
 }
@@ -31,18 +34,25 @@ impl DoipSerializable for Request {
         Some(0)
     }
 
-    fn write_to(&self, _buf: &mut BytesMut) {}
+    /// Alive Check Request carries no payload bytes per ISO 13400-2;
+    /// nothing is written to the buffer by design.
+    fn write_to(&self, _buf: &mut BytesMut) {
+        // Intentionally empty: Alive Check Request has a zero-length payload.
+    }
 }
 
-// Alive Check Response (0x0008) - 2 byte source address
-// Tester responds with its logical address
+/// Alive Check Response (payload type `0x0008`) – sent by the tester in reply,
+/// carrying its logical address.
+///
+/// # Wire Format
+/// Payload: `source_address` (2 bytes, big-endian)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
     source_address: u16,
 }
 
 impl DoipParseable for Response {
-    fn parse(payload: &[u8]) -> crate::DoipResult<Self> {
+    fn parse(payload: &[u8]) -> crate::Result<Self> {
         let bytes: [u8; 2] = parse_fixed_slice(payload, "AliveCheck Response")?;
         let source_address = u16::from_be_bytes(bytes);
         Ok(Self { source_address })
@@ -60,8 +70,10 @@ impl DoipSerializable for Response {
 }
 
 impl Response {
+    /// Fixed wire-format length of the Alive Check Response payload (2-byte source address).
     pub const LEN: usize = 2;
 
+    /// Create a new Alive Check Response with the given tester source address.
     #[must_use]
     pub fn new(source_address: u16) -> Self {
         Self { source_address }

@@ -15,6 +15,7 @@
 //!
 //! Provides the interface between `DoIP` transport and UDS processing.
 
+/// UDS handler trait and request/response types bridging DoIP and ISO 14229-1.
 pub mod handler;
 
 pub use handler::{UdsHandler, UdsRequest, UdsResponse, service_id};
