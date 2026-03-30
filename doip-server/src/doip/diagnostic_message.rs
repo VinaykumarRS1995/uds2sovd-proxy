@@ -22,6 +22,16 @@ const ADDRESS_BYTES: usize = 2;
 const HEADER_BYTES: usize = ADDRESS_BYTES * 2;
 const ACK_CODE_BYTES: usize = 1;
 const MIN_USER_DATA_BYTES: usize = 1;
+/// Wire code for a positive diagnostic acknowledgment (ISO 13400-2:2019 Table 27).
+const POSITIVE_ACK_CODE: u8 = 0x00;
+
+/// Parse source and target addresses from a 4-byte address-pair header.
+/// Layout: SA(2 bytes, big-endian) + TA(2 bytes, big-endian).
+fn parse_address_pair(header: [u8; HEADER_BYTES]) -> (u16, u16) {
+    let source = u16::from_be_bytes([header[0], header[1]]);
+    let target = u16::from_be_bytes([header[2], header[3]]);
+    (source, target)
+}
 
 /// Outcome of a diagnostic message acknowledgment (ISO 13400-2:2019).
 ///
@@ -88,36 +98,46 @@ impl Message {
     /// Minimum message length in bytes (SA + TA + at least 1 byte UDS data)
     pub const MIN_LEN: usize = HEADER_BYTES + MIN_USER_DATA_BYTES;
 
-    /// Create a new diagnostic message
+    /// Create a new diagnostic message.
     ///
     /// # Arguments
     /// * `source` - Source address (tester or ECU)
     /// * `target` - Target address (tester or ECU)
-    /// * `data` - UDS payload data
-    pub fn new(source: u16, target: u16, data: Bytes) -> Self {
-        Self {
+    /// * `data` - UDS payload data (must not be empty)
+    ///
+    /// # Errors
+    /// Returns [`DoipError::EmptyUserData`] if `data` is empty.
+    pub fn new(source: u16, target: u16, data: Bytes) -> crate::Result<Self> {
+        if data.is_empty() {
+            return Err(DoipError::EmptyUserData);
+        }
+        Ok(Self {
             source_address: source,
             target_address: target,
             user_data: data,
-        }
+        })
     }
 
     /// Get the source address
+    #[must_use]
     pub fn source_address(&self) -> u16 {
         self.source_address
     }
 
     /// Get the target address
+    #[must_use]
     pub fn target_address(&self) -> u16 {
         self.target_address
     }
 
     /// Get the UDS user data
+    #[must_use]
     pub fn user_data(&self) -> &Bytes {
         &self.user_data
     }
 
     /// Returns the UDS service ID (first byte of user data), or `None` if the payload is empty.
+    #[must_use]
     pub fn service_id(&self) -> Option<u8> {
         self.user_data.first().copied()
     }
@@ -227,8 +247,7 @@ impl DiagnosticAck {
     /// Parse SA, TA and optional trailing `previous_data` from an ack payload.
     fn parse_ack_header(payload: &[u8], context: &str) -> crate::Result<(u16, u16, Option<Bytes>)> {
         let header: [u8; HEADER_BYTES] = parse_fixed_slice(payload, context)?;
-        let source_address = u16::from_be_bytes([header[0], header[1]]);
-        let target_address = u16::from_be_bytes([header[2], header[3]]);
+        let (source_address, target_address) = parse_address_pair(header);
         let previous_data = payload
             .get(Self::MIN_LEN..)
             .filter(|d| !d.is_empty())
@@ -241,8 +260,7 @@ impl DoipParseable for Message {
     fn parse(payload: &[u8]) -> crate::Result<Self> {
         let header: [u8; HEADER_BYTES] = parse_fixed_slice(payload, "DiagnosticMessage")?;
 
-        let source_address = u16::from_be_bytes([header[0], header[1]]);
-        let target_address = u16::from_be_bytes([header[2], header[3]]);
+        let (source_address, target_address) = parse_address_pair(header);
 
         let user_data = payload
             .get(HEADER_BYTES..)
@@ -291,7 +309,7 @@ impl DoipSerializable for DiagnosticAck {
         buf.put_u16(self.source_address);
         buf.put_u16(self.target_address);
         buf.put_u8(match self.result {
-            AckResult::Positive => 0x00,
+            AckResult::Positive => POSITIVE_ACK_CODE,
             AckResult::Negative(code) => u8::from(code),
         });
         if let Some(ref data) = self.previous_data {
@@ -344,7 +362,7 @@ mod tests {
     #[test]
     fn build_diagnostic_message() {
         let uds = Bytes::from_static(&[0x22, 0xF1, 0x90]);
-        let msg = Message::new(0x0E80, 0x1000, uds);
+        let msg = Message::new(0x0E80, 0x1000, uds).unwrap();
         let bytes = msg.to_bytes();
 
         assert_eq!(&bytes[..ADDRESS_BYTES], &[0x0E, 0x80]);
@@ -407,8 +425,14 @@ mod tests {
     }
 
     #[test]
+    fn reject_empty_user_data() {
+        let err = Message::new(0x0E80, 0x1000, Bytes::new());
+        assert!(matches!(err, Err(DoipError::EmptyUserData)));
+    }
+
+    #[test]
     fn roundtrip_message() {
-        let original = Message::new(0x0E80, 0x1000, Bytes::from_static(&[0x10, 0x01]));
+        let original = Message::new(0x0E80, 0x1000, Bytes::from_static(&[0x10, 0x01])).unwrap();
         let bytes = original.to_bytes();
         let parsed = Message::parse(&bytes).unwrap();
         assert_eq!(original, parsed);

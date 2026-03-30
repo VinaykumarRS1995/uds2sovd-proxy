@@ -19,3 +19,6 @@ pub mod server;
 /// UDS service layer – bridges DoIP transport to ISO 14229-1 request/response handling.
 pub mod uds;
 pub use error::{DoipError, Result};
+
+// No unit tests: this file contains only module declarations and re-exports.
+// All logic lives in the sub-modules, which carry their own test suites.

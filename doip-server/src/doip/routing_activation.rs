@@ -12,11 +12,26 @@
  */
 //! Routing Activation handlers (ISO 13400-2:2019)
 
+use std::mem::size_of;
+
 use bytes::{BufMut, BytesMut};
 use tracing::error;
 
 use super::{DoipParseable, DoipSerializable, parse_fixed_slice};
 use crate::DoipError;
+
+/// Byte length of the optional OEM-specific field (a single u32, big-endian).
+const OEM_DATA_LEN: usize = size_of::<u32>();
+
+/// Parse the optional 4-byte OEM-specific field from the end of a routing activation payload.
+/// Returns `Some(u32)` when exactly `OEM_DATA_LEN` bytes are present beyond `min_len`,
+/// and `None` when the payload ends at `min_len` (i.e. no OEM data).
+fn parse_oem_specific(payload: &[u8], min_len: usize, max_len: usize) -> Option<u32> {
+    payload
+        .get(min_len..max_len)
+        .and_then(|s| <[u8; OEM_DATA_LEN]>::try_from(s).ok())
+        .map(u32::from_be_bytes)
+}
 
 /// Routing activation response codes per ISO 13400-2:2019 Table 25.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -246,10 +261,7 @@ impl DoipParseable for Request {
         })?;
         let reserved = u32::from_be_bytes([header[3], header[4], header[5], header[6]]);
 
-        let oem_specific = payload
-            .get(Self::MIN_LEN..Self::MAX_LEN)
-            .and_then(|s| <[u8; 4]>::try_from(s).ok())
-            .map(u32::from_be_bytes);
+        let oem_specific = parse_oem_specific(payload, Self::MIN_LEN, Self::MAX_LEN);
 
         Ok(Self {
             source_address,
@@ -272,10 +284,7 @@ impl DoipParseable for Response {
         })?;
         let reserved = u32::from_be_bytes([header[5], header[6], header[7], header[8]]);
 
-        let oem_specific = payload
-            .get(Self::MIN_LEN..Self::MAX_LEN)
-            .and_then(|s| <[u8; 4]>::try_from(s).ok())
-            .map(u32::from_be_bytes);
+        let oem_specific = parse_oem_specific(payload, Self::MIN_LEN, Self::MAX_LEN);
 
         Ok(Self {
             tester_address,
@@ -289,7 +298,13 @@ impl DoipParseable for Response {
 
 impl DoipSerializable for Response {
     fn serialized_len(&self) -> Option<usize> {
-        Some(Self::MIN_LEN.saturating_add(if self.oem_specific.is_some() { 4 } else { 0 }))
+        Some(
+            Self::MIN_LEN.saturating_add(if self.oem_specific.is_some() {
+                OEM_DATA_LEN
+            } else {
+                0
+            }),
+        )
     }
 
     fn write_to(&self, buf: &mut BytesMut) {

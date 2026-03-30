@@ -75,37 +75,35 @@ pub enum DoipError {
 }
 
 #[cfg(test)]
-/// UDS Negative Response Codes (ISO 14229-1:2020)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-enum UdsNrc {
-    GeneralReject = 0x10,
-    ServiceNotSupported = 0x11,
-    SubFunctionNotSupported = 0x12,
-    IncorrectMessageLength = 0x13,
-    BusyRepeatRequest = 0x21,
-    ConditionsNotCorrect = 0x22,
-    RequestSequenceError = 0x24,
-    RequestOutOfRange = 0x31,
-    SecurityAccessDenied = 0x33,
-    InvalidKey = 0x35,
-    ExceededNumberOfAttempts = 0x36,
-    RequiredTimeDelayNotExpired = 0x37,
-    ResponsePending = 0x78,
-    ServiceNotSupportedInActiveSession = 0x7F,
-}
-
-#[cfg(test)]
-impl UdsNrc {
-    #[must_use]
-    const fn as_u8(self) -> u8 {
-        self as u8
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
+
+    /// UDS Negative Response Codes (ISO 14229-1:2020)
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[repr(u8)]
+    enum UdsNrc {
+        GeneralReject = 0x10,
+        ServiceNotSupported = 0x11,
+        SubFunctionNotSupported = 0x12,
+        IncorrectMessageLength = 0x13,
+        BusyRepeatRequest = 0x21,
+        ConditionsNotCorrect = 0x22,
+        RequestSequenceError = 0x24,
+        RequestOutOfRange = 0x31,
+        SecurityAccessDenied = 0x33,
+        InvalidKey = 0x35,
+        ExceededNumberOfAttempts = 0x36,
+        RequiredTimeDelayNotExpired = 0x37,
+        ResponsePending = 0x78,
+        ServiceNotSupportedInActiveSession = 0x7F,
+    }
+
+    impl UdsNrc {
+        #[must_use]
+        const fn as_u8(self) -> u8 {
+            self as u8
+        }
+    }
 
     #[test]
     fn test_routing_activation_success() {
