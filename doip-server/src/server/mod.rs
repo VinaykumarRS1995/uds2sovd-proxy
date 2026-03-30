@@ -21,3 +21,6 @@ pub mod session;
 
 pub use config::ServerConfig;
 pub use session::{Session, SessionManager};
+
+// No unit tests: this file contains only module declarations and re-exports.
+// config.rs and session.rs carry their own test suites.
