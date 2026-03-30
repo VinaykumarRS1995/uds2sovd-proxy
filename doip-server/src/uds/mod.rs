@@ -19,3 +19,6 @@
 pub mod handler;
 
 pub use handler::{UdsHandler, UdsRequest, UdsResponse, service_id};
+
+// No unit tests: this file contains only module declarations and re-exports.
+// handler.rs carries its own test suite.

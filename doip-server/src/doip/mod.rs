@@ -122,3 +122,124 @@ pub(crate) fn parse_fixed_slice<const N: usize>(
             e
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DoipError;
+
+    // ── too_short ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn too_short_produces_correct_error() {
+        let payload = [0x01u8, 0x02];
+        let err = too_short(&payload, 5);
+        assert!(matches!(
+            err,
+            DoipError::PayloadTooShort {
+                expected: 5,
+                actual: 2
+            }
+        ));
+    }
+
+    #[test]
+    fn too_short_on_empty_slice() {
+        let err = too_short(&[], 4);
+        assert!(matches!(
+            err,
+            DoipError::PayloadTooShort {
+                expected: 4,
+                actual: 0
+            }
+        ));
+    }
+
+    // ── check_min_len ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn check_min_len_passes_when_exact() {
+        assert!(check_min_len(&[0x01, 0x02], 2).is_ok());
+    }
+
+    #[test]
+    fn check_min_len_passes_when_longer() {
+        assert!(check_min_len(&[0x01, 0x02, 0x03], 2).is_ok());
+    }
+
+    #[test]
+    fn check_min_len_errors_when_too_short() {
+        let result = check_min_len(&[0x01], 2);
+        assert!(matches!(
+            result,
+            Err(DoipError::PayloadTooShort {
+                expected: 2,
+                actual: 1
+            })
+        ));
+    }
+
+    #[test]
+    fn check_min_len_errors_on_empty_slice() {
+        let result = check_min_len(&[], 1);
+        assert!(matches!(
+            result,
+            Err(DoipError::PayloadTooShort {
+                expected: 1,
+                actual: 0
+            })
+        ));
+    }
+
+    #[test]
+    fn check_min_len_zero_always_passes() {
+        assert!(check_min_len(&[], 0).is_ok());
+    }
+
+    // ── parse_fixed_slice ─────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_fixed_slice_extracts_exact_bytes() {
+        let payload = [0x0E, 0x80, 0x10, 0x01];
+        let result: [u8; 2] = parse_fixed_slice(&payload, "test").unwrap();
+        assert_eq!(result, [0x0E, 0x80]);
+    }
+
+    #[test]
+    fn parse_fixed_slice_succeeds_with_extra_bytes() {
+        let payload = [0x01, 0x02, 0x03, 0x04, 0x05];
+        let result: [u8; 3] = parse_fixed_slice(&payload, "test").unwrap();
+        assert_eq!(result, [0x01, 0x02, 0x03]);
+    }
+
+    #[test]
+    fn parse_fixed_slice_errors_when_too_short() {
+        let payload = [0x01u8];
+        let result: crate::Result<[u8; 4]> = parse_fixed_slice(&payload, "test");
+        assert!(matches!(
+            result,
+            Err(DoipError::PayloadTooShort {
+                expected: 4,
+                actual: 1
+            })
+        ));
+    }
+
+    #[test]
+    fn parse_fixed_slice_errors_on_empty() {
+        let result: crate::Result<[u8; 2]> = parse_fixed_slice(&[], "context");
+        assert!(matches!(
+            result,
+            Err(DoipError::PayloadTooShort {
+                expected: 2,
+                actual: 0
+            })
+        ));
+    }
+
+    #[test]
+    fn parse_fixed_slice_zero_size_always_succeeds() {
+        let result: [u8; 0] = parse_fixed_slice(&[], "empty").unwrap();
+        assert_eq!(result, []);
+    }
+}

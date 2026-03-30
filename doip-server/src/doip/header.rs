@@ -27,7 +27,7 @@
 //! See [`codec`](super::codec) for the Tokio TCP framing codec.
 
 use bytes::{BufMut, Bytes, BytesMut};
-use tracing::{debug, warn};
+use tracing::{trace, warn};
 
 /// Generic Header NACK codes (ISO 13400-2:2019 Table 17)
 ///
@@ -210,7 +210,7 @@ impl DoipHeader {
     ///
     /// Returns `None` if valid, or the `GenericNackCode` describing the first violation.
     pub fn validate(&self) -> Option<GenericNackCode> {
-        debug!(
+        trace!(
             version = format!("0x{:02X}", self.version),
             inverse_version = format!("0x{:02X}", self.inverse_version),
             payload_type = format!("0x{:04X}", self.payload_type),
