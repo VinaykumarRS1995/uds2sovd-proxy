@@ -185,8 +185,6 @@ mod tests {
     use super::*;
     use crate::doip::header::{DoipMessage, PayloadType};
 
-    // ── helpers ──────────────────────────────────────────────────────────────
-
     // Build a minimal valid DoIP frame:
     //   version=0x02, inverse=0xFD, payload_type (u16 BE), payload_length (u32 BE), payload
     fn make_frame(payload_type: u16, payload: &[u8]) -> BytesMut {
@@ -198,8 +196,6 @@ mod tests {
         buf.extend_from_slice(payload);
         buf
     }
-
-    // ── DoipCodec::new / Default ──────────────────────────────────────────────
 
     #[test]
     fn new_and_default_behave_the_same() {
@@ -235,8 +231,6 @@ mod tests {
         let mut buf2 = make_frame(0x8001, &exact);
         assert!(codec2.decode(&mut buf2).unwrap().is_some());
     }
-
-    // ── Decoder: happy-path ───────────────────────────────────────────────────
 
     #[test]
     fn decode_alive_check_request() {
@@ -283,8 +277,6 @@ mod tests {
         assert!(buf.is_empty());
     }
 
-    // ── Decoder: partial / incomplete data ───────────────────────────────────
-
     #[test]
     fn decode_returns_none_when_header_incomplete() {
         let mut codec = DoipCodec::new();
@@ -310,8 +302,6 @@ mod tests {
         assert!(codec.decode(&mut buf).unwrap().is_none());
     }
 
-    // ── Decoder: error cases ──────────────────────────────────────────────────
-
     #[test]
     fn decode_rejects_invalid_version() {
         let mut codec = DoipCodec::new();
@@ -335,8 +325,6 @@ mod tests {
         let mut buf = make_frame(0x8001, &data);
         assert!(codec.decode(&mut buf).unwrap().is_some());
     }
-
-    // ── Encoder ───────────────────────────────────────────────────────────────
 
     #[test]
     fn encode_produces_correct_wire_bytes() {
@@ -365,8 +353,6 @@ mod tests {
         assert_eq!(buf.len(), 8); // header only
         assert_eq!(buf.get(4..8).unwrap(), &[0x00, 0x00, 0x00, 0x00]); // zero payload length
     }
-
-    // ── Roundtrip ─────────────────────────────────────────────────────────────
 
     #[test]
     fn roundtrip_encode_then_decode() {

@@ -171,7 +171,6 @@ mod tests {
     use bytes::Bytes;
 
     use super::*;
-    use crate::doip::{DoipMessage, PayloadType};
 
     fn make_msg(payload_type: PayloadType, payload: impl Into<Bytes>) -> DoipMessage {
         DoipMessage::new(payload_type, payload.into())

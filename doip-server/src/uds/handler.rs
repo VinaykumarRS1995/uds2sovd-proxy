@@ -19,7 +19,7 @@
 
 use bytes::Bytes;
 
-/// UDS Service IDs (ISO 14229-1:2020)
+/// UDS Service IDs (ISO 14229-1:2020, Section 10 – Service definition)
 pub mod service_id {
     /// Diagnostic Session Control (0x10) – switch the ECU into a specific diagnostic session.
     pub const DIAGNOSTIC_SESSION_CONTROL: u8 = 0x10;

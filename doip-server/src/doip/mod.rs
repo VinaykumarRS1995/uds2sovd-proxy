@@ -128,8 +128,6 @@ mod tests {
     use super::*;
     use crate::DoipError;
 
-    // ── too_short ─────────────────────────────────────────────────────────────
-
     #[test]
     fn too_short_produces_correct_error() {
         let payload = [0x01u8, 0x02];
@@ -154,8 +152,6 @@ mod tests {
             }
         ));
     }
-
-    // ── check_min_len ─────────────────────────────────────────────────────────
 
     #[test]
     fn check_min_len_passes_when_exact() {
@@ -195,8 +191,6 @@ mod tests {
     fn check_min_len_zero_always_passes() {
         assert!(check_min_len(&[], 0).is_ok());
     }
-
-    // ── parse_fixed_slice ─────────────────────────────────────────────────────
 
     #[test]
     fn parse_fixed_slice_extracts_exact_bytes() {

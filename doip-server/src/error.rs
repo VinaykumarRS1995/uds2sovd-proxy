@@ -16,12 +16,6 @@ use std::{io, net::AddrParseError};
 
 use thiserror::Error;
 
-// Re-export from the canonical definitions in the protocol modules
-pub use crate::doip::diagnostic_message::NackCode as DiagnosticNackCode;
-pub use crate::doip::{
-    header::GenericNackCode, routing_activation::ResponseCode as RoutingActivationCode,
-};
-
 /// Result type alias for `DoIP` operations
 pub type Result<T> = std::result::Result<T, DoipError>;
 
@@ -72,11 +66,18 @@ pub enum DoipError {
 
     #[error("diagnostic message has no user data")]
     EmptyUserData,
+
+    #[error("unexpected payload data: expected empty payload, got {actual} bytes")]
+    UnexpectedPayload { actual: usize },
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::doip::diagnostic_message::NackCode as DiagnosticNackCode;
+    use crate::doip::{
+        header::GenericNackCode, routing_activation::ResponseCode as RoutingActivationCode,
+    };
 
     /// UDS Negative Response Codes (ISO 14229-1:2020)
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]

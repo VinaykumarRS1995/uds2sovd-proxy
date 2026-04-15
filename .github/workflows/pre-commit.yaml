@@ -33,4 +33,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run checks
-        uses: eclipse-opensovd/cicd-workflows/pre-commit-action@fef5cc7b2d4c4c6593b105402fbf4edd54db7d5a
+        uses: eclipse-opensovd/cicd-workflows/pre-commit-action@41c531349e9d7e7852455c35682cd200519fb81b
