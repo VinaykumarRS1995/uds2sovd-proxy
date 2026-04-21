@@ -51,18 +51,9 @@ pub struct DoipCodec {
 }
 
 impl DoipCodec {
-    /// Create a new `DoipCodec` with the default maximum payload size.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            state: DecodeState::Header,
-            max_payload_size: DEFAULT_MAX_PAYLOAD_SIZE,
-        }
-    }
-
-    /// Create codec with custom max payload size limit
+    /// Create a codec that enforces a custom maximum payload size.
     ///
-    /// The size is u32 to match the `DoIP` header `payload_length` field (4 bytes).
+    /// The size is `u32` to match the `DoIP` header `payload_length` field (4 bytes).
     /// This provides `DoS` protection by rejecting oversized messages early.
     #[must_use]
     pub fn with_max_payload_size(max_size: u32) -> Self {
@@ -75,7 +66,10 @@ impl DoipCodec {
 
 impl Default for DoipCodec {
     fn default() -> Self {
-        Self::new()
+        Self {
+            state: DecodeState::Header,
+            max_payload_size: DEFAULT_MAX_PAYLOAD_SIZE,
+        }
     }
 }
 
@@ -186,7 +180,7 @@ mod tests {
     #[test]
     fn new_and_default_behave_the_same() {
         // Both should decode the same frame identically
-        let mut a = DoipCodec::new();
+        let mut a = DoipCodec::default();
         let mut b = DoipCodec::default();
         let frame = make_frame(0x0007, &[]);
         let ra = a.decode(&mut frame.clone()).unwrap();
@@ -198,7 +192,7 @@ mod tests {
     fn new_accepts_large_payload_within_default_limit() {
         // Default codec must not reject reasonable-sized payloads
         let data = vec![0u8; 1024];
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let mut buf = make_frame(0x8001, &data);
         assert!(codec.decode(&mut buf).unwrap().is_some());
     }
@@ -221,7 +215,7 @@ mod tests {
     #[test]
     fn decode_alive_check_request() {
         // Alive check request (type 0x0007) has no payload
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let mut buf = make_frame(0x0007, &[]);
         let msg = codec.decode(&mut buf).unwrap().unwrap();
         assert_eq!(msg.header.payload_type(), 0x0007);
@@ -231,7 +225,7 @@ mod tests {
 
     #[test]
     fn decode_message_with_payload() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let data = [0x0E, 0x80, 0x10, 0x01, 0x3E];
         let mut buf = make_frame(0x8001, &data);
         let msg = codec.decode(&mut buf).unwrap().unwrap();
@@ -242,7 +236,7 @@ mod tests {
     #[test]
     fn decode_resets_state_for_next_message() {
         // After a successful decode, the codec must accept another frame
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let mut buf = make_frame(0x0007, &[]);
         codec.decode(&mut buf).unwrap().unwrap();
         // Buffer is empty — a healthy reset returns None, not an error
@@ -251,7 +245,7 @@ mod tests {
 
     #[test]
     fn decode_back_to_back_frames() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let mut buf = make_frame(0x0007, &[]);
         buf.extend_from_slice(&make_frame(0x0008, &[0xAA, 0xBB]));
 
@@ -265,7 +259,7 @@ mod tests {
 
     #[test]
     fn decode_returns_none_when_header_incomplete() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         // Only 4 of the 8 header bytes present
         let mut buf = BytesMut::from(&[0x02u8, 0xFD, 0x00, 0x07][..]);
         assert!(codec.decode(&mut buf).unwrap().is_none());
@@ -273,7 +267,7 @@ mod tests {
 
     #[test]
     fn decode_returns_none_when_payload_incomplete() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         // AliveCheckResponse (0x0008) minimum is 2 bytes.
         // Declare 4 bytes in the header but only provide 2 → codec must wait.
         let mut buf = make_frame(0x0008, &[0x0E, 0x80, 0x00, 0x00]);
@@ -283,14 +277,14 @@ mod tests {
 
     #[test]
     fn decode_returns_none_on_empty_buffer() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let mut buf = BytesMut::new();
         assert!(codec.decode(&mut buf).unwrap().is_none());
     }
 
     #[test]
     fn decode_rejects_invalid_version() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         // version 0x04 is not a valid DoIP protocol version
         let mut buf = BytesMut::from(&[0x04u8, 0xFB, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00][..]);
         assert!(codec.decode(&mut buf).is_err());
@@ -314,7 +308,7 @@ mod tests {
 
     #[test]
     fn encode_produces_correct_wire_bytes() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let payload = Bytes::from_static(&[0x0E, 0x80, 0x10, 0x01]);
         let msg = DoipMessage::new(PayloadType::DiagnosticMessage, payload);
 
@@ -330,7 +324,7 @@ mod tests {
 
     #[test]
     fn encode_empty_payload() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let msg = DoipMessage::new(PayloadType::AliveCheckRequest, Bytes::new());
 
         let mut buf = BytesMut::new();
@@ -342,12 +336,15 @@ mod tests {
 
     #[test]
     fn roundtrip_encode_then_decode() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let payload = Bytes::from_static(&[0x0E, 0x80, 0x22, 0xF1, 0x90]);
         let original = DoipMessage::new(PayloadType::DiagnosticMessage, payload);
 
         let mut buf = BytesMut::new();
         codec.encode(original.clone(), &mut buf).unwrap();
+        // `decode` returns `Result<Option<T>>`: the outer unwrap() asserts no I/O error
+        // occurred; the inner unwrap() asserts a complete message was returned rather
+        // than `None` (= "need more data"). This is the standard Tokio codec contract.
         let decoded = codec.decode(&mut buf).unwrap().unwrap();
 
         assert_eq!(original.header, decoded.header);

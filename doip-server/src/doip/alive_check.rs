@@ -26,7 +26,15 @@ use crate::Result;
 pub struct AliveCheckRequest;
 
 impl DoipParseable for AliveCheckRequest {
-    fn parse(_payload: &[u8]) -> Result<Self> {
+    /// # Errors
+    /// Returns [`crate::DoipError::UnexpectedPayload`] if `payload` is non-empty.
+    /// ISO 13400-2:2019 §7.6 defines the Alive Check Request as zero-length.
+    fn parse(payload: &[u8]) -> Result<Self> {
+        if !payload.is_empty() {
+            return Err(crate::DoipError::UnexpectedPayload {
+                actual: payload.len(),
+            });
+        }
         Ok(Self)
     }
 }
@@ -89,9 +97,17 @@ mod tests {
     }
 
     #[test]
-    fn parse_request() {
+    fn parse_request_empty_payload() {
         let req = AliveCheckRequest::parse(&[]).unwrap();
         assert_eq!(req, AliveCheckRequest);
+    }
+
+    #[test]
+    fn parse_request_rejects_nonempty_payload() {
+        assert!(matches!(
+            AliveCheckRequest::parse(&[0xDE, 0xAD]),
+            Err(crate::DoipError::UnexpectedPayload { actual: 2 })
+        ));
     }
 
     #[test]
