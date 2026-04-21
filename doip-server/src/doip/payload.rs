@@ -239,4 +239,198 @@ mod tests {
             PayloadType::GenericNack,
         );
     }
+
+    #[test]
+    fn diagnostic_message_roundtrip() {
+        // SA=0x0E80, TA=0x1000, SID=0x10 (DiagnosticSessionControl), sub=0x01
+        let payload = vec![0x0E, 0x80, 0x10, 0x00, 0x10, 0x01];
+        let msg = make_msg(PayloadType::DiagnosticMessage, payload);
+        let parsed = DoipPayload::parse(&msg).unwrap();
+        assert!(matches!(parsed, DoipPayload::DiagnosticMessage(_)));
+        assert_eq!(parsed.payload_type(), PayloadType::DiagnosticMessage);
+    }
+
+    #[test]
+    fn diagnostic_positive_ack_roundtrip() {
+        // SA=0x0E80, TA=0x1000, ack_code=0x00 (positive per ISO 13400-2:2019 Table 27)
+        let payload = vec![0x0E, 0x80, 0x10, 0x00, 0x00];
+        let msg = make_msg(PayloadType::DiagnosticMessagePositiveAck, payload);
+        let parsed = DoipPayload::parse(&msg).unwrap();
+        assert!(matches!(
+            parsed,
+            DoipPayload::DiagnosticMessagePositiveAck(_)
+        ));
+        assert_eq!(
+            parsed.payload_type(),
+            PayloadType::DiagnosticMessagePositiveAck
+        );
+    }
+
+    #[test]
+    fn diagnostic_negative_ack_roundtrip() {
+        // SA=0x0E80, TA=0x1000, nack_code=0x03 (UnknownTargetAddress)
+        let payload = vec![0x0E, 0x80, 0x10, 0x00, 0x03];
+        let msg = make_msg(PayloadType::DiagnosticMessageNegativeAck, payload);
+        let parsed = DoipPayload::parse(&msg).unwrap();
+        assert!(matches!(
+            parsed,
+            DoipPayload::DiagnosticMessageNegativeAck(_)
+        ));
+        assert_eq!(
+            parsed.payload_type(),
+            PayloadType::DiagnosticMessageNegativeAck
+        );
+    }
+
+    #[test]
+    fn vehicle_id_request_roundtrip() {
+        // VehicleIdentificationRequest carries no payload (ISO 13400-2:2019 §7.5.2)
+        let msg = make_msg(PayloadType::VehicleIdentificationRequest, vec![]);
+        let parsed = DoipPayload::parse(&msg).unwrap();
+        assert!(matches!(
+            parsed,
+            DoipPayload::VehicleIdentificationRequest(_)
+        ));
+        assert_eq!(
+            parsed.payload_type(),
+            PayloadType::VehicleIdentificationRequest
+        );
+    }
+
+    #[test]
+    fn vehicle_id_request_with_eid_roundtrip() {
+        let eid = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
+        let msg = make_msg(
+            PayloadType::VehicleIdentificationRequestWithEid,
+            eid.to_vec(),
+        );
+        let parsed = DoipPayload::parse(&msg).unwrap();
+        assert!(matches!(
+            parsed,
+            DoipPayload::VehicleIdentificationRequestWithEid(_)
+        ));
+        assert_eq!(
+            parsed.payload_type(),
+            PayloadType::VehicleIdentificationRequestWithEid
+        );
+    }
+
+    #[test]
+    fn vehicle_id_request_with_vin_roundtrip() {
+        let vin = *b"TESTVIN1234567890"; // 17 ASCII bytes per ISO 3779
+        let msg = make_msg(
+            PayloadType::VehicleIdentificationRequestWithVin,
+            vin.to_vec(),
+        );
+        let parsed = DoipPayload::parse(&msg).unwrap();
+        assert!(matches!(
+            parsed,
+            DoipPayload::VehicleIdentificationRequestWithVin(_)
+        ));
+        assert_eq!(
+            parsed.payload_type(),
+            PayloadType::VehicleIdentificationRequestWithVin
+        );
+    }
+
+    #[test]
+    fn vehicle_id_response_roundtrip() {
+        use crate::doip::DoipSerializable;
+        let vin = *b"TESTVIN1234567890";
+        let eid = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
+        let gid = [0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54];
+        let resp = vehicle_id::Response::new(vin, 0x1000, eid, gid);
+        let msg = make_msg(PayloadType::VehicleIdentificationResponse, resp.to_bytes());
+        let parsed = DoipPayload::parse(&msg).unwrap();
+        assert!(matches!(
+            parsed,
+            DoipPayload::VehicleIdentificationResponse(_)
+        ));
+        assert_eq!(
+            parsed.payload_type(),
+            PayloadType::VehicleIdentificationResponse
+        );
+    }
+
+    #[test]
+    fn entity_status_and_power_mode_return_unknown_error() {
+        // These payload types are recognised by the header but not yet dispatched
+        // in DoipPayload::parse — they must return UnknownPayloadType.
+        for pt in [
+            PayloadType::DoipEntityStatusRequest,
+            PayloadType::DoipEntityStatusResponse,
+            PayloadType::DiagnosticPowerModeRequest,
+            PayloadType::DiagnosticPowerModeResponse,
+        ] {
+            let msg = make_msg(pt, vec![]);
+            assert!(
+                matches!(
+                    DoipPayload::parse(&msg),
+                    Err(crate::DoipError::UnknownPayloadType(_))
+                ),
+                "expected UnknownPayloadType for {pt:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn generic_nack_empty_payload_returns_error() {
+        // GenericNack requires exactly 1 byte for the nack code
+        let msg = make_msg(PayloadType::GenericNack, vec![]);
+        assert!(matches!(
+            DoipPayload::parse(&msg),
+            Err(crate::DoipError::PayloadTooShort {
+                expected: 1,
+                actual: 0
+            })
+        ));
+    }
+
+    #[test]
+    fn alive_check_request_with_data_returns_error() {
+        // AliveCheckRequest must have a zero-length payload (ISO 13400-2:2019 §7.6)
+        let msg = make_msg(PayloadType::AliveCheckRequest, vec![0xDE, 0xAD]);
+        assert!(matches!(
+            DoipPayload::parse(&msg),
+            Err(crate::DoipError::UnexpectedPayload { actual: 2 })
+        ));
+    }
+
+    #[test]
+    fn payload_type_covers_all_variants() {
+        // Verify payload_type() returns the matching PayloadType for every variant
+        let vin = *b"TESTVIN1234567890";
+        let eid = [0x12u8; 6];
+        let gid = [0xFEu8; 6];
+
+        assert_eq!(
+            DoipPayload::AliveCheckRequest(alive_check::Request).payload_type(),
+            PayloadType::AliveCheckRequest
+        );
+        assert_eq!(
+            DoipPayload::AliveCheckResponse(alive_check::Response::new(0x0E80)).payload_type(),
+            PayloadType::AliveCheckResponse
+        );
+        assert_eq!(
+            DoipPayload::VehicleIdentificationRequest(vehicle_id::Request).payload_type(),
+            PayloadType::VehicleIdentificationRequest
+        );
+        assert_eq!(
+            DoipPayload::VehicleIdentificationRequestWithEid(vehicle_id::RequestWithEid::new(eid))
+                .payload_type(),
+            PayloadType::VehicleIdentificationRequestWithEid
+        );
+        assert_eq!(
+            DoipPayload::VehicleIdentificationRequestWithVin(vehicle_id::RequestWithVin::new(vin))
+                .payload_type(),
+            PayloadType::VehicleIdentificationRequestWithVin
+        );
+        assert_eq!(
+            DoipPayload::VehicleIdentificationResponse(vehicle_id::Response::new(
+                vin, 0x1000, eid, gid
+            ))
+            .payload_type(),
+            PayloadType::VehicleIdentificationResponse
+        );
+    }
 }
