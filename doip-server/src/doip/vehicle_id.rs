@@ -48,23 +48,23 @@ pub struct Request;
 /// Only the `DoIP` entity with a matching 6-byte EID should respond.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestWithEid {
-    eid: [u8; 6],
+    eid: [u8; EID_LEN],
 }
 
 impl RequestWithEid {
     /// Fixed wire-format length of a Vehicle Identification Request with EID
     /// payload (6-byte EID filter).
-    pub const LEN: usize = 6;
+    pub const PAYLOAD_LEN: usize = EID_LEN;
 
     /// Create a new Vehicle Identification Request filtered by the given 6-byte EID.
     #[must_use]
-    pub fn new(eid: [u8; 6]) -> Self {
+    pub fn new(eid: [u8; EID_LEN]) -> Self {
         Self { eid }
     }
 
     /// The EID filter value
     #[must_use]
-    pub fn eid(&self) -> &[u8; 6] {
+    pub fn eid(&self) -> &[u8; EID_LEN] {
         &self.eid
     }
 }
@@ -74,22 +74,22 @@ impl RequestWithEid {
 /// Only the `DoIP` entity with a matching 17-byte VIN should respond.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestWithVin {
-    vin: [u8; 17],
+    vin: [u8; VIN_LEN],
 }
 
 impl RequestWithVin {
     /// Fixed wire-format length of a Vehicle Identification Request with VIN payload (17-byte VIN).
-    pub const LEN: usize = 17;
+    pub const PAYLOAD_LEN: usize = VIN_LEN;
 
     /// Create a new Vehicle Identification Request filtered by the given 17-byte VIN.
     #[must_use]
-    pub fn new(vin: [u8; 17]) -> Self {
+    pub fn new(vin: [u8; VIN_LEN]) -> Self {
         Self { vin }
     }
 
     /// The VIN filter value as bytes
     #[must_use]
-    pub fn vin(&self) -> &[u8; 17] {
+    pub fn vin(&self) -> &[u8; VIN_LEN] {
         &self.vin
     }
 
@@ -163,10 +163,10 @@ impl From<SyncStatus> for u8 {
 /// VIN(17) + LogicalAddr(2) + EID(6) + GID(6) + FurtherAction(1) + optional SyncStatus(1)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
-    vin: [u8; 17],
+    vin: [u8; VIN_LEN],
     logical_address: u16,
-    eid: [u8; 6],
-    gid: [u8; 6],
+    eid: [u8; EID_LEN],
+    gid: [u8; GID_LEN],
     further_action: FurtherAction,
     sync_status: Option<SyncStatus>,
 }
@@ -184,7 +184,12 @@ impl Response {
     /// `further_action` defaults to [`FurtherAction::NoFurtherAction`]; use
     /// [`with_routing_required`](Self::with_routing_required) to override.
     #[must_use]
-    pub fn new(vin: [u8; 17], logical_address: u16, eid: [u8; 6], gid: [u8; 6]) -> Self {
+    pub fn new(
+        vin: [u8; VIN_LEN],
+        logical_address: u16,
+        eid: [u8; EID_LEN],
+        gid: [u8; GID_LEN],
+    ) -> Self {
         Self {
             vin,
             logical_address,
@@ -218,7 +223,12 @@ impl Response {
 }
 
 impl DoipParseable for Request {
-    fn parse(_payload: &[u8]) -> crate::Result<Self> {
+    fn parse(payload: &[u8]) -> crate::Result<Self> {
+        if !payload.is_empty() {
+            return Err(DoipError::UnexpectedPayload {
+                actual: payload.len(),
+            });
+        }
         Ok(Self)
     }
 }

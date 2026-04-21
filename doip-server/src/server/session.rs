@@ -98,7 +98,7 @@ impl Session {
 
 /// Thread-safe registry of active `DoIP` sessions.
 ///
-/// The mutable session state is held in a single [`RwLock`]-protected `Inner`
+/// The mutable session state is held in this single [`RwLock`]-protected `Inner`
 /// struct for atomic multi-map updates, while the monotonic ID counter uses
 /// an [`AtomicU64`] to avoid taking the write-lock just to mint a new ID.
 /// Access this via the [`Arc`] returned by [`SessionManager::new`].

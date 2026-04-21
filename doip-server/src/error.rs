@@ -72,6 +72,9 @@ pub enum DoipError {
 
     #[error("diagnostic message has no user data")]
     EmptyUserData,
+
+    #[error("unexpected payload data: expected empty payload, got {actual} bytes")]
+    UnexpectedPayload { actual: usize },
 }
 
 #[cfg(test)]
