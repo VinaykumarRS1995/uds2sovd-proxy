@@ -362,6 +362,30 @@ pub struct DoipMessage {
 }
 
 impl DoipMessage {
+    /// Create a `DoIP` message mirroring the protocol version from an incoming request.
+    ///
+    /// Used by TCP and UDP handlers to echo back the same protocol version
+    /// the tester sent, as required by ISO 13400-2:2019.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `payload.len()` exceeds `u32::MAX`. In practice `DoIP` limits
+    /// messages to [`MAX_DOIP_MESSAGE_SIZE`] (4 MB) which fits well within `u32`.
+    // TODO(follow-up PR): remove once TCP/UDP handlers call this.
+    #[allow(dead_code)]
+    pub(crate) fn with_version(version: u8, payload_type: PayloadType, payload: Bytes) -> Self {
+        Self {
+            header: DoipHeader {
+                version,
+                inverse_version: version ^ DOIP_HEADER_VERSION_MASK,
+                payload_type: u16::from(payload_type),
+                payload_length: u32::try_from(payload.len())
+                    .expect("DoIP payload size within u32 bounds"),
+            },
+            payload,
+        }
+    }
+
     /// Returns the decoded `PayloadType`, or `None` if the raw value is not a known type.
     pub fn payload_type(&self) -> Option<PayloadType> {
         PayloadType::try_from(self.header.payload_type).ok()
