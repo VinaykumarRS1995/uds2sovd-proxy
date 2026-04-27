@@ -21,6 +21,7 @@ members = ["doip-server"]
 # ---- async runtime ----
 tokio = { version = "1", default-features = false }
 tokio-util = { version = "0.7", default-features = false }
+futures-util = { version = "0.3", default-features = false }
 # ---- serialization ----
 serde = { version = "1.0", default-features = false }
 toml = { version = "0.9", default-features = false }

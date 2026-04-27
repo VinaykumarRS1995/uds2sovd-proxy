@@ -18,6 +18,8 @@
 pub mod config;
 /// Thread-safe session registry for active DoIP tester connections.
 pub mod session;
+/// TCP diagnostic handler — accept loop, routing activation, diagnostic message dispatch.
+pub mod tcp_handler;
 /// UDP vehicle-discovery handler (ISO 13400-2:2019 §8.3 – vehicle identification).
 pub mod udp_handler;
 
