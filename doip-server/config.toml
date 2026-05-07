@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+
+# DoIP Server Configuration (ISO 13400-2:2019)
+#
+# All fields are optional — omitted values fall back to ISO 13400-2 defaults.
+#
+# Usage:
+#   doip-server --config config.toml
+
+[server]
+# Network interface to bind on. Use "0.0.0.0" for all interfaces.
+bind_address = "0.0.0.0"
+# TCP port for diagnostic connections (ISO 13400-2 assigned port: 13400)
+tcp_port = 13400
+# UDP port for vehicle identification broadcasts (ISO 13400-2 assigned port: 13400)
+udp_port = 13400
+# Maximum number of concurrent TCP diagnostic connections
+max_connections = 10
+
+[vehicle]
+# Logical address of this DoIP entity (ISO 13400-2 Section 7.3)
+# Must be unique within the vehicle network.
+logical_address = 0x0E00
+# Vehicle Identification Number — exactly 17 ASCII characters (ISO 3779)
+vin = "DOIPSERVER0000001"
+# Entity Identification — 6 bytes, typically the ECU MAC address (colon-separated hex)
+eid = "00:1A:2B:3C:4D:5E"
+# Group Identification — 6 bytes identifying a functional ECU group
+gid = "00:00:00:00:00:01"
+
+[timeouts]
+# T_TCP_Initial: inactivity timeout before routing activation (ISO 13400-2: 2 s)
+initial_inactivity_ms = 2000
+# T_TCP_General: inactivity timeout after routing activation (ISO 13400-2: 5 min)
+general_inactivity_ms = 300000
