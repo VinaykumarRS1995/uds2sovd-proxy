@@ -76,7 +76,8 @@ impl UdsRequest {
     }
 
     /// Returns the UDS Service ID, which is the first byte of the UDS payload
-    /// per ISO 14229-1:2020 (UDS). None is returned for empty payloads.
+    /// per ISO 14229-1:2020 (UDS). Returns `None` for empty payloads.
+    #[must_use]
     pub fn service_id(&self) -> Option<u8> {
         self.payload.first().copied()
     }
@@ -174,8 +175,32 @@ mod tests {
         let payload = Bytes::from(vec![0x62, 0x01]);
         let response = UdsResponse::new(0x1000, 0x0E00, payload.clone());
 
-        assert_eq!(response.source_address, 0x1000);
-        assert_eq!(response.target_address, 0x0E00);
-        assert_eq!(response.payload, payload);
+        assert_eq!(response.source_address(), 0x1000);
+        assert_eq!(response.target_address(), 0x0E00);
+        assert_eq!(response.payload(), &payload);
+    }
+
+    #[test]
+    fn uds_nrc_wire_values() {
+        // Verify UDS NRC codes (ISO 14229-1:2020 Table A.1) match their wire values.
+        let cases: &[(u8, u8)] = &[
+            (0x10, 0x10), // GeneralReject
+            (0x11, 0x11), // ServiceNotSupported
+            (0x12, 0x12), // SubFunctionNotSupported
+            (0x13, 0x13), // IncorrectMessageLength
+            (0x21, 0x21), // BusyRepeatRequest
+            (0x22, 0x22), // ConditionsNotCorrect
+            (0x24, 0x24), // RequestSequenceError
+            (0x31, 0x31), // RequestOutOfRange
+            (0x33, 0x33), // SecurityAccessDenied
+            (0x35, 0x35), // InvalidKey
+            (0x36, 0x36), // ExceededNumberOfAttempts
+            (0x37, 0x37), // RequiredTimeDelayNotExpired
+            (0x78, 0x78), // ResponsePending
+            (0x7F, 0x7F), // ServiceNotSupportedInActiveSession
+        ];
+        for &(nrc, expected) in cases {
+            assert_eq!(nrc, expected);
+        }
     }
 }

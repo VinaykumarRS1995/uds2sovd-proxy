@@ -18,6 +18,7 @@ use std::{net::SocketAddr, path::Path};
 use serde::Deserialize;
 
 use crate::DoipError;
+use crate::Result;
 
 // ============================================================================
 // Default Configuration Constants (per ISO 13400-2 DoIP specification)
@@ -32,8 +33,11 @@ const DEFAULT_BIND_ADDRESS: &str = "0.0.0.0";
 /// Default ECU logical address (`DoIP` entity address)
 const DEFAULT_LOGICAL_ADDRESS: u16 = 0x0091;
 
+/// VIN length per ISO 3779:2009 §5.3 — exactly 17 alphanumeric characters.
+pub(crate) const VIN_LEN: usize = 17;
+
 /// Default Vehicle Identification Number (17 ASCII characters per ISO 3779)
-const DEFAULT_VIN: &[u8; 17] = b"TESTVIN1234567890";
+const DEFAULT_VIN: &[u8; VIN_LEN] = b"TESTVIN1234567890";
 
 /// Default Entity Identification (6 bytes, typically MAC address)
 const DEFAULT_EID: [u8; 6] = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
@@ -63,7 +67,7 @@ pub struct ServerConfig {
     /// Logical address of this `DoIP` entity (ISO 13400-2 Section 7.3)
     logical_address: u16,
     /// Vehicle Identification Number — 17 ASCII bytes per ISO 3779
-    vin: [u8; 17],
+    vin: [u8; VIN_LEN],
     /// Entity Identification — 6 bytes, typically the MAC address
     eid: [u8; 6],
     /// Group Identification — 6 bytes identifying a functional group
@@ -197,7 +201,7 @@ impl ServerConfig {
     /// Returns [`DoipError::ConfigFileError`] if file cannot be read or parsed.
     /// Returns [`DoipError::InvalidConfig`] if values are invalid.
     /// Returns [`DoipError::InvalidAddress`] if bind address is malformed.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> crate::Result<Self> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content =
             std::fs::read_to_string(path).map_err(|e| DoipError::ConfigFileError(e.to_string()))?;
         let file: ConfigFile =
@@ -235,20 +239,20 @@ impl ServerConfig {
         })
     }
 
-    fn parse_vin(s: &str) -> crate::Result<[u8; 17]> {
+    fn parse_vin(s: &str) -> Result<[u8; VIN_LEN]> {
         let bytes = s.as_bytes();
-        if bytes.len() != 17 {
+        if bytes.len() != VIN_LEN {
             return Err(DoipError::InvalidConfig(format!(
-                "VIN must be exactly 17 characters, got {}",
+                "VIN must be exactly {VIN_LEN} characters (ISO 3779), got {}",
                 bytes.len()
             )));
         }
-        let mut vin = [0u8; 17];
+        let mut vin = [0u8; VIN_LEN];
         vin.copy_from_slice(bytes);
         Ok(vin)
     }
 
-    fn parse_hex_array<const N: usize>(s: &str) -> crate::Result<[u8; N]> {
+    fn parse_hex_array<const N: usize>(s: &str) -> Result<[u8; N]> {
         let s = s.trim_start_matches("0x").replace([':', '-', ' '], "");
         let bytes = hex::decode(&s).map_err(|e| DoipError::HexDecodeError(e.to_string()))?;
         if bytes.len() != N {
@@ -338,7 +342,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_config() {
+    fn default_config_has_iso_port_and_standard_timeouts() {
         let config = ServerConfig::default();
 
         assert_eq!(config.tcp_addr().port(), DEFAULT_DOIP_PORT);
@@ -359,7 +363,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_with_logical_address() {
+    fn new_sets_logical_address_with_iso_defaults() {
         let config = ServerConfig::new(0x1234);
 
         assert_eq!(config.logical_address(), 0x1234);
@@ -367,39 +371,39 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_vin_valid() {
+    fn parse_vin_accepts_valid_17_char_iso_3779_string() {
         let result = ServerConfig::parse_vin("WVWZZZ3CZWE123456");
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 17);
     }
 
     #[test]
-    fn test_parse_vin_invalid_length() {
+    fn parse_vin_rejects_string_not_17_chars() {
         let result = ServerConfig::parse_vin("SHORTVIN");
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_parse_hex_array_valid() {
-        let result: crate::Result<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B:3C:4D:5E");
+    fn parse_hex_array_parses_colon_separated_hex_bytes() {
+        let result: Result<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B:3C:4D:5E");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E]);
     }
 
     #[test]
-    fn test_parse_hex_array_with_0x_prefix() {
-        let result: crate::Result<[u8; 6]> = ServerConfig::parse_hex_array("0x001A2B3C4D5E");
+    fn parse_hex_array_strips_0x_prefix_before_decoding() {
+        let result: Result<[u8; 6]> = ServerConfig::parse_hex_array("0x001A2B3C4D5E");
         assert!(result.is_ok());
     }
 
     #[test]
-    fn test_parse_hex_array_invalid_length() {
-        let result: crate::Result<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B");
+    fn parse_hex_array_rejects_length_mismatch() {
+        let result: Result<[u8; 6]> = ServerConfig::parse_hex_array("00:1A:2B");
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_with_vin_builder() {
+    fn with_vin_replaces_default_vin() {
         let new_vin = *b"NEWVIN12345678901";
         let config = ServerConfig::default().with_vin(new_vin);
 
@@ -407,7 +411,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_addresses_builder() {
+    fn with_addresses_replaces_default_bind_sockets() {
         let tcp: SocketAddr = "192.168.1.1:13400".parse().unwrap();
         let udp: SocketAddr = "192.168.1.1:13401".parse().unwrap();
         let config = ServerConfig::default().with_addresses(tcp, udp);

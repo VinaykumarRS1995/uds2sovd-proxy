@@ -33,56 +33,55 @@ pub mod vehicle_id;
 use bytes::{Bytes, BytesMut};
 pub use codec::DoipCodec;
 pub use header::{
-    DEFAULT_PROTOCOL_VERSION, DEFAULT_PROTOCOL_VERSION_INV, DOIP_HEADER_LENGTH,
-    DOIP_HEADER_VERSION_MASK, DOIP_VERSION_DEFAULT, DoipHeader, DoipMessage, GenericNackCode,
-    MAX_DOIP_MESSAGE_SIZE, PROTOCOL_VERSION_V1, PROTOCOL_VERSION_V3, PayloadType,
+    DEFAULT_PROTOCOL_VERSION, DOIP_HEADER_LENGTH, DoipHeader, DoipMessage, GenericNackCode,
+    MAX_DOIP_MESSAGE_SIZE, PayloadType,
 };
 pub use payload::DoipPayload;
 use tracing::error;
 
-use crate::DoipError;
+use crate::{DoipError, Result};
 
 /// Trait for `DoIP` message types that can be parsed from a raw payload slice.
 ///
 /// Implement this for every message struct so callers can decode incoming
 /// `DoIP` frames through a uniform interface.
-pub trait DoipParseable: Sized {
+pub(crate) trait DoipParseable: Sized {
     /// Parse a `DoIP` message from a raw payload byte slice.
     ///
     /// # Errors
     /// Returns [`DoipError`] if the payload is malformed or too short.
-    fn parse(payload: &[u8]) -> crate::Result<Self>;
+    fn parse(payload: &[u8]) -> Result<Self>;
 }
 
 /// Trait for `DoIP` message types that can be serialized to a [`Bytes`] buffer.
 ///
-/// Implement [`write_to`] with the wire-format logic. The default [`to_bytes`]
-/// wraps it in a `BytesMut` and calls `freeze()`, so you never write that
-/// boilerplate again.
+/// Implement [`write_to`](DoipSerializable::write_to) with the wire-format logic.
+/// The default [`to_bytes`](DoipSerializable::to_bytes) wraps it in a `BytesMut`
+/// and calls `freeze()`, so you never write that boilerplate again.
 pub trait DoipSerializable {
     /// Write the serialized wire-format bytes into `buf`.
     fn write_to(&self, buf: &mut BytesMut);
 
     /// Returns `Some(n)` when the size is known ahead of serialization,
-    /// enabling [`to_bytes`] to pre-allocate the buffer and avoid incremental
-    /// `BytesMut` reallocations for large messages.
+    /// enabling [`to_bytes`](DoipSerializable::to_bytes) to pre-allocate the buffer
+    /// and avoid incremental `BytesMut` reallocations for large messages.
     ///
     /// Returns `None` (the default) to indicate the size is not known in
-    /// advance; [`to_bytes`] will then use a dynamically-growing buffer.
-    /// Override this in your implementation whenever the encoded length is
-    /// computable upfront.
+    /// advance; [`to_bytes`](DoipSerializable::to_bytes) will then use a
+    /// dynamically-growing buffer. Override this in your implementation whenever
+    /// the encoded length is computable upfront.
     fn serialized_len(&self) -> Option<usize> {
         None
     }
 
     /// Serialize this message into a [`Bytes`] buffer.
     ///
-    /// Pre-allocates the buffer when [`serialized_len`] returns `Some`.
+    /// Pre-allocates the buffer when [`serialized_len`](DoipSerializable::serialized_len)
+    /// returns `Some`.
     fn to_bytes(&self) -> Bytes {
-        let mut buf = match self.serialized_len() {
-            Some(n) => BytesMut::with_capacity(n),
-            None => BytesMut::new(),
-        };
+        let mut buf = self
+            .serialized_len()
+            .map_or_else(BytesMut::new, BytesMut::with_capacity);
         self.write_to(&mut buf);
         buf.freeze()
     }
@@ -97,7 +96,7 @@ pub(crate) fn too_short(payload: &[u8], expected: usize) -> DoipError {
 }
 
 /// Return `Err` if `payload` is shorter than `expected` bytes.
-pub(crate) fn check_min_len(payload: &[u8], expected: usize) -> crate::Result<()> {
+pub(crate) fn check_min_len(payload: &[u8], expected: usize) -> Result<()> {
     if payload.len() < expected {
         Err(too_short(payload, expected))
     } else {
@@ -109,10 +108,7 @@ pub(crate) fn check_min_len(payload: &[u8], expected: usize) -> crate::Result<()
 ///
 /// Logs an error and returns [`DoipError::PayloadTooShort`] when the slice
 /// is shorter than `N` bytes, using `context` to identify the call site in the log.
-pub(crate) fn parse_fixed_slice<const N: usize>(
-    payload: &[u8],
-    context: &str,
-) -> crate::Result<[u8; N]> {
+pub(crate) fn parse_fixed_slice<const N: usize>(payload: &[u8], context: &str) -> Result<[u8; N]> {
     payload
         .get(..N)
         .and_then(|s| s.try_into().ok())

@@ -29,6 +29,8 @@
 use bytes::{BufMut, Bytes, BytesMut};
 use tracing::{trace, warn};
 
+use crate::Result;
+
 /// Generic Header NACK codes (ISO 13400-2:2019 Table 17)
 ///
 /// Negative acknowledgment codes sent in Generic `DoIP` Header NACK (payload type 0x0000)
@@ -59,18 +61,19 @@ impl TryFrom<u8> for GenericNackCode {
 }
 
 /// `DoIP` protocol version 0x01 (legacy, pre-ISO 13400-2:2012)
-pub const PROTOCOL_VERSION_V1: u8 = 0x01;
+pub(crate) const PROTOCOL_VERSION_V1: u8 = 0x01;
 /// Default `DoIP` protocol version 0x02 (ISO 13400-2:2012 / 2019)
 pub const DEFAULT_PROTOCOL_VERSION: u8 = 0x02;
 /// `DoIP` protocol version 0x03 (ISO 13400-2:2019 update)
-pub const PROTOCOL_VERSION_V3: u8 = 0x03;
+pub(crate) const PROTOCOL_VERSION_V3: u8 = 0x03;
 /// Wildcard/default protocol version (ISO 13400-2:2019 – accept any version)
-pub const DOIP_VERSION_DEFAULT: u8 = 0xFF;
+pub(crate) const DOIP_VERSION_DEFAULT: u8 = 0xFF;
 /// XOR mask used to compute and verify the inverse version byte in the `DoIP` header.
 /// The header requires `version XOR inverse_version == 0xFF`.
-pub const DOIP_HEADER_VERSION_MASK: u8 = 0xFF;
+pub(crate) const DOIP_HEADER_VERSION_MASK: u8 = 0xFF;
 /// Inverse of default protocol version for header validation
-pub const DEFAULT_PROTOCOL_VERSION_INV: u8 = DEFAULT_PROTOCOL_VERSION ^ DOIP_HEADER_VERSION_MASK;
+pub(crate) const DEFAULT_PROTOCOL_VERSION_INV: u8 =
+    DEFAULT_PROTOCOL_VERSION ^ DOIP_HEADER_VERSION_MASK;
 /// Size of `DoIP` header in bytes (ISO 13400-2:2019 Section 6)
 pub const DOIP_HEADER_LENGTH: usize = 8;
 /// Maximum `DoIP` message size (4MB) - provides `DoS` protection while allowing
@@ -131,8 +134,8 @@ impl TryFrom<u16> for PayloadType {
 }
 
 impl From<PayloadType> for u16 {
-    fn from(pt: PayloadType) -> u16 {
-        pt as u16
+    fn from(pt: PayloadType) -> Self {
+        pt as Self
     }
 }
 
@@ -186,7 +189,7 @@ impl DoipHeader {
     ///
     /// # Errors
     /// Returns [`crate::DoipError::InvalidHeader`] if data is less than 8 bytes.
-    pub(crate) fn parse(data: &[u8]) -> crate::Result<Self> {
+    pub(crate) fn parse(data: &[u8]) -> Result<Self> {
         let header: [u8; DOIP_HEADER_LENGTH] = data
             .get(..DOIP_HEADER_LENGTH)
             .and_then(|s| s.try_into().ok())
@@ -274,7 +277,8 @@ impl DoipHeader {
 
     /// Returns `true` if [`validate`](Self::validate) finds no errors in this header.
     #[must_use]
-    pub fn is_valid(&self) -> bool {
+    #[cfg(test)]
+    pub(crate) fn is_valid(self) -> bool {
         self.validate().is_none()
     }
 
@@ -297,7 +301,7 @@ impl DoipHeader {
     }
 
     /// Write the 8-byte `DoIP` header into `buf`.
-    pub fn write_to(&self, buf: &mut BytesMut) {
+    pub(crate) fn write_to(self, buf: &mut BytesMut) {
         buf.put_u8(self.version);
         buf.put_u8(self.inverse_version);
         buf.put_u16(self.payload_type);
@@ -388,7 +392,7 @@ impl DoipMessage {
     ///
     /// Panics if `payload.len()` exceeds `u32::MAX`.
     #[cfg(test)]
-    pub fn with_raw_payload_type(payload_type: u16, payload: Bytes) -> Self {
+    pub(crate) fn with_raw_payload_type(payload_type: u16, payload: Bytes) -> Self {
         Self {
             header: DoipHeader {
                 version: DEFAULT_PROTOCOL_VERSION,

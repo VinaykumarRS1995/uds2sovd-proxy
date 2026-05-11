@@ -25,14 +25,21 @@ use parking_lot::RwLock;
 use tracing::debug;
 
 /// Session states per ISO 13400-2:2019 connection lifecycle
+///
+/// This is an internal type. External callers should use [`Session::is_routing_active`] instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SessionState {
+pub(crate) enum SessionState {
     Connected,
     RoutingActive,
+    /// Reserved per ISO 13400-2:2019 §7.4 lifecycle — not yet transitioned to in-process.
+    #[allow(dead_code)]
     Closed,
 }
 
 /// A single `DoIP` tester connection and its lifecycle state.
+///
+/// Tracks the connection lifecycle from initial TCP connect through routing
+/// activation to eventual disconnect per ISO 13400-2:2019 §7.4.
 #[derive(Debug, Clone)]
 pub struct Session {
     /// Unique monotonic session identifier assigned at connection time
@@ -47,8 +54,10 @@ pub struct Session {
 
 impl Session {
     /// Create a new session in the [`SessionState::Connected`] state.
+    ///
+    /// This is `pub(crate)` — sessions are only ever constructed by [`SessionManager`].
     #[must_use]
-    pub fn new(id: u64, peer_addr: SocketAddr) -> Self {
+    pub(crate) fn new(id: u64, peer_addr: SocketAddr) -> Self {
         Self {
             id,
             peer_addr,
@@ -57,9 +66,11 @@ impl Session {
         }
     }
 
-    /// Transition this session to [`SessionState::RoutingActive`] and record
+    /// Transition this session to the `RoutingActive` state and record
     /// the tester's logical address.
-    pub fn activate_routing(&mut self, tester_address: u16) {
+    // Used by feat/tcp-handler (TCP connection handler) — not dead.
+    #[allow(dead_code)]
+    pub(crate) fn activate_routing(&mut self, tester_address: u16) {
         debug!(session_id = self.id, tester_address, "routing activated");
         self.tester_address = tester_address;
         self.state = SessionState::RoutingActive;
@@ -89,9 +100,13 @@ impl Session {
         self.tester_address
     }
 
-    /// Returns the current lifecycle state.
+    /// Returns the current ISO 13400-2 connection lifecycle state.
+    ///
+    /// This is `pub(crate)` — external callers should use [`is_routing_active`] instead,
+    /// which provides a boolean answer without exposing the internal [`SessionState`] type.
     #[must_use]
-    pub fn state(&self) -> SessionState {
+    #[cfg(test)]
+    pub(crate) fn connection_state(&self) -> SessionState {
         self.state
     }
 }
@@ -110,9 +125,9 @@ struct SessionManagerInner {
 
 /// Thread-safe registry of active `DoIP` tester sessions.
 ///
-/// Uses a single [`RwLock`] over [`SessionManagerInner`] to ensure atomic consistency
-/// between the session map and the address-to-ID index, plus a lock-free [`AtomicU64`]
-/// counter for session ID allocation.
+/// Uses a single [`RwLock`] over an internal map to ensure atomic consistency
+/// between the session map and the address-to-ID index, plus a lock-free
+/// [`AtomicU64`] counter for session ID allocation.
 #[derive(Debug, Default)]
 pub struct SessionManager {
     inner: RwLock<SessionManagerInner>,
@@ -130,9 +145,11 @@ impl SessionManager {
     pub fn create_session(&self, peer_addr: SocketAddr) -> Session {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let session = Session::new(id, peer_addr);
-        let mut inner = self.inner.write();
-        inner.sessions.insert(id, session.clone());
-        inner.addr_to_session.insert(peer_addr, id);
+        {
+            let mut inner = self.inner.write();
+            inner.sessions.insert(id, session.clone());
+            inner.addr_to_session.insert(peer_addr, id);
+        }
         debug!(session_id = id, peer = %peer_addr, "Session created");
         session
     }
@@ -154,29 +171,36 @@ impl SessionManager {
     where
         F: FnOnce(&mut Session),
     {
-        if let Some(session) = self.inner.write().sessions.get_mut(&id) {
-            f(session);
-            true
-        } else {
-            false
-        }
+        self.inner
+            .write()
+            .sessions
+            .get_mut(&id)
+            .is_some_and(|session| {
+                f(session);
+                true
+            })
     }
 
     /// Remove and return the session with the given `id`, or `None` if not found.
     pub fn remove_session(&self, id: u64) -> Option<Session> {
-        let mut inner = self.inner.write();
-        let session = inner.sessions.remove(&id)?;
-        inner.addr_to_session.remove(&session.peer_addr);
+        let session = {
+            let mut inner = self.inner.write();
+            let session = inner.sessions.remove(&id)?;
+            inner.addr_to_session.remove(&session.peer_addr);
+            session
+        };
         debug!(session_id = id, peer = %session.peer_addr, "Session removed");
         Some(session)
     }
 
     /// Remove and return the session associated with `addr`, or `None` if not found.
     pub fn remove_session_by_addr(&self, addr: &SocketAddr) -> Option<Session> {
-        let mut inner = self.inner.write();
-        let id = inner.addr_to_session.remove(addr)?;
-        let session = inner.sessions.remove(&id)?;
-        debug!(session_id = id, peer = %addr, "Session removed by addr");
+        let session = {
+            let mut inner = self.inner.write();
+            let id = inner.addr_to_session.remove(addr)?;
+            inner.sessions.remove(&id)?
+        };
+        debug!(session_id = session.id, peer = %addr, "Session removed by addr");
         Some(session)
     }
 
@@ -200,19 +224,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn create_and_get_session() {
+    fn session_is_created_in_connected_state() {
         let mgr = SessionManager::new();
         let addr: SocketAddr = "127.0.0.1:5000".parse().unwrap();
 
         let session = mgr.create_session(addr);
-        assert_eq!(session.state(), SessionState::Connected);
+        // New sessions must start in Connected state per ISO 13400-2 lifecycle
+        assert_eq!(session.connection_state(), SessionState::Connected);
 
         let retrieved = mgr.get_session(session.id()).unwrap();
         assert_eq!(retrieved.peer_addr(), addr);
     }
 
     #[test]
-    fn activate_routing() {
+    fn session_transitions_to_routing_active() {
         let mgr = SessionManager::new();
         let addr: SocketAddr = "127.0.0.1:5000".parse().unwrap();
 
@@ -220,12 +245,14 @@ mod tests {
         mgr.update_session(session.id(), |s| s.activate_routing(0x0E80));
 
         let updated = mgr.get_session(session.id()).unwrap();
+        // After routing activation the session must be RoutingActive
+        // and the tester logical address must be recorded
         assert!(updated.is_routing_active());
         assert_eq!(updated.tester_address(), 0x0E80);
     }
 
     #[test]
-    fn remove_session() {
+    fn session_is_removed_from_registry() {
         let mgr = SessionManager::new();
         let addr: SocketAddr = "127.0.0.1:5000".parse().unwrap();
 
@@ -233,19 +260,22 @@ mod tests {
         assert_eq!(mgr.session_count(), 1);
 
         mgr.remove_session(session.id());
+        // Both the session map and addr index must be cleaned up
         assert_eq!(mgr.session_count(), 0);
         assert!(mgr.get_session(session.id()).is_none());
     }
 
     #[test]
-    fn check_tester_registered() {
+    fn tester_is_registered_only_after_routing_activation() {
         let mgr = SessionManager::new();
         let addr: SocketAddr = "127.0.0.1:5000".parse().unwrap();
 
         let session = mgr.create_session(addr);
+        // Before activation: tester address must not be registered
         assert!(!mgr.is_tester_registered(0x0E80));
 
         mgr.update_session(session.id(), |s| s.activate_routing(0x0E80));
+        // After activation: tester address must be found in the registry
         assert!(mgr.is_tester_registered(0x0E80));
     }
 }

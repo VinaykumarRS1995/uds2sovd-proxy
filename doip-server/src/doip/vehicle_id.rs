@@ -18,6 +18,7 @@ use tracing::error;
 
 use super::{DoipParseable, DoipSerializable, check_min_len, parse_fixed_slice, too_short};
 use crate::DoipError;
+use crate::Result;
 
 // Wire-format field lengths for VehicleIdentificationResponse (ISO 13400-2:2019)
 const VIN_LEN: usize = 17;
@@ -40,21 +41,25 @@ const SYNC_STATUS_IDX: usize = FURTHER_ACTION_IDX + FURTHER_ACTION_LEN; // 32
 /// Vehicle Identification Request (payload type `0x0001`) – broadcast with no filter criteria.
 ///
 /// The `DoIP` entity responds with a Vehicle Identification Response containing VIN, EID, and GID.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Request;
+///
+/// `Clone` is derived because [`DoipPayload`](super::payload::DoipPayload) wraps this type and itself derives `Clone`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VehicleIdRequest;
 
 /// Vehicle Identification Request filtered by EID (payload type `0x0002`).
 ///
 /// Only the `DoIP` entity with a matching 6-byte EID should respond.
+///
+/// `Clone` is derived because [`DoipPayload`](super::payload::DoipPayload) wraps this type and itself derives `Clone`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RequestWithEid {
+pub struct VehicleIdRequestWithEid {
     eid: [u8; EID_LEN],
 }
 
-impl RequestWithEid {
+impl VehicleIdRequestWithEid {
     /// Fixed wire-format length of a Vehicle Identification Request with EID
     /// payload (6-byte EID filter).
-    pub const PAYLOAD_LEN: usize = EID_LEN;
+    pub(crate) const PAYLOAD_LEN: usize = EID_LEN;
 
     /// Create a new Vehicle Identification Request filtered by the given 6-byte EID.
     #[must_use]
@@ -72,14 +77,16 @@ impl RequestWithEid {
 /// Vehicle Identification Request filtered by VIN (payload type `0x0003`).
 ///
 /// Only the `DoIP` entity with a matching 17-byte VIN should respond.
+///
+/// `Clone` is derived because [`DoipPayload`](super::payload::DoipPayload) wraps this type and itself derives `Clone`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RequestWithVin {
+pub struct VehicleIdRequestWithVin {
     vin: [u8; VIN_LEN],
 }
 
-impl RequestWithVin {
+impl VehicleIdRequestWithVin {
     /// Fixed wire-format length of a Vehicle Identification Request with VIN payload (17-byte VIN).
-    pub const PAYLOAD_LEN: usize = VIN_LEN;
+    pub(crate) const PAYLOAD_LEN: usize = VIN_LEN;
 
     /// Create a new Vehicle Identification Request filtered by the given 17-byte VIN.
     #[must_use]
@@ -123,8 +130,8 @@ impl TryFrom<u8> for FurtherAction {
 }
 
 impl From<FurtherAction> for u8 {
-    fn from(action: FurtherAction) -> u8 {
-        action as u8
+    fn from(action: FurtherAction) -> Self {
+        action as Self
     }
 }
 
@@ -133,12 +140,12 @@ impl From<FurtherAction> for u8 {
 /// Indicates whether the `DoIP` entity's Group ID is synchronized across all ECUs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum SyncStatus {
+pub enum GidSyncStatus {
     Synchronized = 0x00,
     NotSynchronized = 0x10,
 }
 
-impl TryFrom<u8> for SyncStatus {
+impl TryFrom<u8> for GidSyncStatus {
     type Error = u8;
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
         match value {
@@ -149,9 +156,9 @@ impl TryFrom<u8> for SyncStatus {
     }
 }
 
-impl From<SyncStatus> for u8 {
-    fn from(status: SyncStatus) -> u8 {
-        status as u8
+impl From<GidSyncStatus> for u8 {
+    fn from(status: GidSyncStatus) -> Self {
+        status as Self
     }
 }
 
@@ -160,24 +167,26 @@ impl From<SyncStatus> for u8 {
 /// Contains VIN, logical address, EID, GID, further action code, and optional sync status.
 ///
 /// # Wire Format
-/// VIN(17) + LogicalAddr(2) + EID(6) + GID(6) + FurtherAction(1) + optional SyncStatus(1)
+/// VIN(17) + LogicalAddr(2) + EID(6) + GID(6) + FurtherAction(1) + optional GidSyncStatus(1)
+///
+/// `Clone` is derived because [`DoipPayload`](super::payload::DoipPayload) wraps this type and itself derives `Clone`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Response {
+pub struct VehicleIdResponse {
     vin: [u8; VIN_LEN],
     logical_address: u16,
     eid: [u8; EID_LEN],
     gid: [u8; GID_LEN],
     further_action: FurtherAction,
-    sync_status: Option<SyncStatus>,
+    sync_status: Option<GidSyncStatus>,
 }
 
-impl Response {
+impl VehicleIdResponse {
     /// Minimum wire-format length of a Vehicle Identification Response payload
     /// (32 bytes: VIN(17) + LogicalAddr(2) + EID(6) + GID(6) + FurtherAction(1)).
-    pub const MIN_LEN: usize = SYNC_STATUS_IDX;
+    pub(crate) const MIN_LEN: usize = SYNC_STATUS_IDX;
     /// Maximum wire-format length of a Vehicle Identification Response payload
-    /// (33 bytes: adds optional SyncStatus(1)).
-    pub const MAX_LEN: usize = SYNC_STATUS_IDX + 1;
+    /// (33 bytes: adds optional GidSyncStatus(1)).
+    pub(crate) const MAX_LEN: usize = SYNC_STATUS_IDX + 1;
 
     /// Create a new Vehicle Identification Response with the required fields.
     ///
@@ -210,7 +219,7 @@ impl Response {
     /// Attach an optional GID synchronization status byte to the response
     /// (ISO 13400-2:2019 Table 22).
     #[must_use]
-    pub fn with_sync_status(mut self, status: SyncStatus) -> Self {
+    pub fn with_sync_status(mut self, status: GidSyncStatus) -> Self {
         self.sync_status = Some(status);
         self
     }
@@ -220,10 +229,46 @@ impl Response {
     pub fn vin_string(&self) -> String {
         String::from_utf8_lossy(&self.vin).to_string()
     }
+
+    /// The raw VIN bytes.
+    #[must_use]
+    pub fn vin(&self) -> &[u8; VIN_LEN] {
+        &self.vin
+    }
+
+    /// The logical address of the `DoIP` entity.
+    #[must_use]
+    pub fn logical_address(&self) -> u16 {
+        self.logical_address
+    }
+
+    /// The 6-byte Entity Identifier.
+    #[must_use]
+    pub fn eid(&self) -> &[u8; EID_LEN] {
+        &self.eid
+    }
+
+    /// The 6-byte Group Identifier.
+    #[must_use]
+    pub fn gid(&self) -> &[u8; GID_LEN] {
+        &self.gid
+    }
+
+    /// The further action code.
+    #[must_use]
+    pub fn further_action(&self) -> FurtherAction {
+        self.further_action
+    }
+
+    /// The optional GID synchronization status.
+    #[must_use]
+    pub fn sync_status(&self) -> Option<GidSyncStatus> {
+        self.sync_status
+    }
 }
 
-impl DoipParseable for Request {
-    fn parse(payload: &[u8]) -> crate::Result<Self> {
+impl DoipParseable for VehicleIdRequest {
+    fn parse(payload: &[u8]) -> Result<Self> {
         if !payload.is_empty() {
             return Err(DoipError::UnexpectedPayload {
                 actual: payload.len(),
@@ -233,22 +278,22 @@ impl DoipParseable for Request {
     }
 }
 
-impl DoipParseable for RequestWithEid {
-    fn parse(payload: &[u8]) -> crate::Result<Self> {
-        let eid: [u8; 6] = parse_fixed_slice(payload, "VehicleId RequestWithEid")?;
+impl DoipParseable for VehicleIdRequestWithEid {
+    fn parse(payload: &[u8]) -> Result<Self> {
+        let eid: [u8; Self::PAYLOAD_LEN] = parse_fixed_slice(payload, "VehicleIdRequestWithEid")?;
         Ok(Self { eid })
     }
 }
 
-impl DoipParseable for RequestWithVin {
-    fn parse(payload: &[u8]) -> crate::Result<Self> {
-        let vin: [u8; 17] = parse_fixed_slice(payload, "VehicleId RequestWithVin")?;
+impl DoipParseable for VehicleIdRequestWithVin {
+    fn parse(payload: &[u8]) -> Result<Self> {
+        let vin: [u8; Self::PAYLOAD_LEN] = parse_fixed_slice(payload, "VehicleIdRequestWithVin")?;
         Ok(Self { vin })
     }
 }
 
-impl DoipParseable for Response {
-    fn parse(payload: &[u8]) -> crate::Result<Self> {
+impl DoipParseable for VehicleIdResponse {
+    fn parse(payload: &[u8]) -> Result<Self> {
         if let Err(e) = check_min_len(payload, Self::MIN_LEN) {
             error!(error = %e, "VehicleId Response parse failed");
             return Err(e);
@@ -284,7 +329,7 @@ impl DoipParseable for Response {
 
         let sync_status = payload
             .get(SYNC_STATUS_IDX)
-            .map(|&b| SyncStatus::try_from(b).map_err(DoipError::UnknownSyncStatus))
+            .map(|&b| GidSyncStatus::try_from(b).map_err(DoipError::UnknownSyncStatus))
             .transpose()?;
 
         Ok(Self {
@@ -298,9 +343,13 @@ impl DoipParseable for Response {
     }
 }
 
-impl DoipSerializable for Response {
+impl DoipSerializable for VehicleIdResponse {
     fn serialized_len(&self) -> Option<usize> {
-        Some(Self::MIN_LEN.saturating_add(usize::from(self.sync_status.is_some())))
+        Some(if self.sync_status.is_some() {
+            Self::MAX_LEN
+        } else {
+            Self::MIN_LEN
+        })
     }
 
     fn write_to(&self, buf: &mut BytesMut) {
@@ -323,34 +372,34 @@ mod tests {
 
     #[test]
     fn parse_basic_request() {
-        let req = Request::parse(&[]).unwrap();
-        assert_eq!(req, Request);
+        let req = VehicleIdRequest::parse(&[]).unwrap();
+        assert_eq!(req, VehicleIdRequest);
     }
 
     #[test]
     fn parse_request_with_eid() {
         let payload = [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E];
-        let req = RequestWithEid::parse(&payload).unwrap();
-        assert_eq!(req.eid, [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E]);
+        let req = VehicleIdRequestWithEid::parse(&payload).unwrap();
+        assert_eq!(req.eid(), &[0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E]);
     }
 
     #[test]
     fn reject_short_eid_request() {
         let short = [0x00, 0x1A, 0x2B];
-        assert!(RequestWithEid::parse(&short).is_err());
+        assert!(VehicleIdRequestWithEid::parse(&short).is_err());
     }
 
     #[test]
     fn parse_request_with_vin() {
         let vin = b"WVWZZZ3CZWE123456";
-        let req = RequestWithVin::parse(vin).unwrap();
+        let req = VehicleIdRequestWithVin::parse(vin).unwrap();
         assert_eq!(req.vin_string(), "WVWZZZ3CZWE123456");
     }
 
     #[test]
     fn reject_short_vin_request() {
         let short = b"WVWZZZ";
-        assert!(RequestWithVin::parse(short).is_err());
+        assert!(VehicleIdRequestWithVin::parse(short).is_err());
     }
 
     #[test]
@@ -359,11 +408,11 @@ mod tests {
         let eid = [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E];
         let gid = [0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
 
-        let resp = Response::new(vin, 0x1000, eid, gid);
+        let resp = VehicleIdResponse::new(vin, 0x1000, eid, gid);
 
-        assert_eq!(resp.logical_address, 0x1000);
-        assert_eq!(resp.further_action, FurtherAction::NoFurtherAction);
-        assert!(resp.sync_status.is_none());
+        assert_eq!(resp.logical_address(), 0x1000);
+        assert_eq!(resp.further_action(), FurtherAction::NoFurtherAction);
+        assert!(resp.sync_status().is_none());
     }
 
     #[test]
@@ -372,9 +421,9 @@ mod tests {
         let eid = [0; 6];
         let gid = [0; 6];
 
-        let resp = Response::new(vin, 0x1000, eid, gid).with_routing_required();
+        let resp = VehicleIdResponse::new(vin, 0x1000, eid, gid).with_routing_required();
         assert_eq!(
-            resp.further_action,
+            resp.further_action(),
             FurtherAction::RoutingActivationRequired
         );
     }
@@ -385,10 +434,10 @@ mod tests {
         let eid = [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E];
         let gid = [0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
 
-        let resp = Response::new(vin, 0x1000, eid, gid);
+        let resp = VehicleIdResponse::new(vin, 0x1000, eid, gid);
         let bytes = resp.to_bytes();
 
-        assert_eq!(bytes.len(), Response::MIN_LEN);
+        assert_eq!(bytes.len(), VehicleIdResponse::MIN_LEN);
         assert_eq!(&bytes[..VIN_LEN], b"WVWZZZ3CZWE123456");
         assert_eq!(&bytes[ADDR_START..ADDR_END], &[0x10, 0x00]); // logical address
     }
@@ -399,11 +448,12 @@ mod tests {
         let eid = [0; 6];
         let gid = [0; 6];
 
-        let resp = Response::new(vin, 0x1000, eid, gid).with_sync_status(SyncStatus::Synchronized);
+        let resp = VehicleIdResponse::new(vin, 0x1000, eid, gid)
+            .with_sync_status(GidSyncStatus::Synchronized);
         let bytes = resp.to_bytes();
 
-        assert_eq!(bytes.len(), Response::MAX_LEN);
-        assert_eq!(bytes[SYNC_STATUS_IDX], SyncStatus::Synchronized as u8); // sync status
+        assert_eq!(bytes.len(), VehicleIdResponse::MAX_LEN);
+        assert_eq!(bytes[SYNC_STATUS_IDX], GidSyncStatus::Synchronized as u8); // sync status
     }
 
     #[test]
@@ -412,14 +462,14 @@ mod tests {
         let eid = [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E];
         let gid = [0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
 
-        let original = Response::new(vin, 0x1000, eid, gid);
+        let original = VehicleIdResponse::new(vin, 0x1000, eid, gid);
         let bytes = original.to_bytes();
-        let parsed = Response::parse(&bytes).unwrap();
+        let parsed = VehicleIdResponse::parse(&bytes).unwrap();
 
-        assert_eq!(parsed.vin, vin);
-        assert_eq!(parsed.logical_address, 0x1000);
-        assert_eq!(parsed.eid, eid);
-        assert_eq!(parsed.gid, gid);
+        assert_eq!(parsed.vin(), &vin);
+        assert_eq!(parsed.logical_address(), 0x1000);
+        assert_eq!(parsed.eid(), &eid);
+        assert_eq!(parsed.gid(), &gid);
     }
 
     #[test]
@@ -428,12 +478,12 @@ mod tests {
         let eid = [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E];
         let gid = [0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
 
-        let original = Response::new(vin, 0x1000, eid, gid)
+        let original = VehicleIdResponse::new(vin, 0x1000, eid, gid)
             .with_routing_required()
-            .with_sync_status(SyncStatus::NotSynchronized);
+            .with_sync_status(GidSyncStatus::NotSynchronized);
 
         let bytes = original.to_bytes();
-        let parsed = Response::parse(&bytes).unwrap();
+        let parsed = VehicleIdResponse::parse(&bytes).unwrap();
 
         assert_eq!(original, parsed);
     }

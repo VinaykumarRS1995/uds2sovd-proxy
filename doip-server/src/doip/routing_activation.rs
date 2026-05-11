@@ -19,6 +19,7 @@ use tracing::error;
 
 use super::{DoipParseable, DoipSerializable, parse_fixed_slice};
 use crate::DoipError;
+use crate::Result;
 
 /// Byte length of the optional OEM-specific field (a single u32, big-endian).
 const OEM_DATA_LEN: usize = size_of::<u32>();
@@ -36,7 +37,7 @@ fn parse_oem_specific(payload: &[u8], min_len: usize, max_len: usize) -> Option<
 /// Routing activation response codes per ISO 13400-2:2019 Table 25.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum ResponseCode {
+pub enum ActivationResponseCode {
     /// Source address unknown to the `DoIP` entity (`0x00`)
     UnknownSourceAddress = 0x00,
     /// All TCP sockets on the `DoIP` entity are registered and active (`0x01`)
@@ -59,7 +60,7 @@ pub enum ResponseCode {
     ConfirmationRequired = 0x11,
 }
 
-impl TryFrom<u8> for ResponseCode {
+impl TryFrom<u8> for ActivationResponseCode {
     type Error = DoipError;
 
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
@@ -79,13 +80,13 @@ impl TryFrom<u8> for ResponseCode {
     }
 }
 
-impl From<ResponseCode> for u8 {
-    fn from(code: ResponseCode) -> u8 {
-        code as u8
+impl From<ActivationResponseCode> for u8 {
+    fn from(code: ActivationResponseCode) -> Self {
+        code as Self
     }
 }
 
-impl ResponseCode {
+impl ActivationResponseCode {
     /// Returns `true` if this code represents a successful or pending-confirmation activation.
     #[must_use]
     pub fn is_success(self) -> bool {
@@ -126,21 +127,23 @@ impl TryFrom<u8> for ActivationType {
 ///
 /// # Wire Format
 /// Payload: SA(2) + type(1) + reserved(4) + optional OEM(4)
+///
+/// `Clone` is derived because [`DoipPayload`](super::payload::DoipPayload) wraps this type and itself derives `Clone`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Request {
+pub struct RoutingActivationRequest {
     source_address: u16,
     activation_type: ActivationType,
     reserved: u32,
     oem_specific: Option<u32>,
 }
 
-impl Request {
+impl RoutingActivationRequest {
     /// Minimum wire-format length of a Routing Activation Request payload
     /// (7 bytes: SA + type + reserved, without OEM data).
-    pub const MIN_LEN: usize = 7;
+    pub(crate) const MIN_LEN: usize = 7;
     /// Maximum wire-format length of a Routing Activation Request payload
     /// (11 bytes: includes optional 4-byte OEM data).
-    pub const MAX_LEN: usize = 11;
+    pub(crate) const MAX_LEN: usize = 11;
 
     /// Tester logical source address
     #[must_use]
@@ -172,22 +175,24 @@ impl Request {
 ///
 /// # Wire Format
 /// Payload: testerAddr(2) + entityAddr(2) + code(1) + reserved(4) + optional OEM(4)
+///
+/// `Clone` is derived because [`DoipPayload`](super::payload::DoipPayload) wraps this type and itself derives `Clone`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Response {
+pub struct RoutingActivationResponse {
     tester_address: u16,
     entity_address: u16,
-    code: ResponseCode,
+    code: ActivationResponseCode,
     reserved: u32,
     oem_specific: Option<u32>,
 }
 
-impl Response {
+impl RoutingActivationResponse {
     /// Minimum wire-format length of a Routing Activation Response payload
     /// (9 bytes: tester addr + entity addr + code + reserved, without OEM data).
-    pub const MIN_LEN: usize = 9;
+    pub(crate) const MIN_LEN: usize = 9;
     /// Maximum wire-format length of a Routing Activation Response payload
     /// (13 bytes: includes optional 4-byte OEM data).
-    pub const MAX_LEN: usize = 13;
+    pub(crate) const MAX_LEN: usize = 13;
 
     /// Build a successful routing activation response.
     #[must_use]
@@ -195,7 +200,7 @@ impl Response {
         Self {
             tester_address,
             entity_address,
-            code: ResponseCode::SuccessfullyActivated,
+            code: ActivationResponseCode::SuccessfullyActivated,
             reserved: 0,
             oem_specific: None,
         }
@@ -203,7 +208,7 @@ impl Response {
 
     /// Build a denied routing activation response with the given `code`.
     #[must_use]
-    pub fn denial(tester_address: u16, entity_address: u16, code: ResponseCode) -> Self {
+    pub fn denial(tester_address: u16, entity_address: u16, code: ActivationResponseCode) -> Self {
         Self {
             tester_address,
             entity_address,
@@ -233,7 +238,7 @@ impl Response {
 
     /// Routing activation response code
     #[must_use]
-    pub fn response_code(&self) -> ResponseCode {
+    pub fn response_code(&self) -> ActivationResponseCode {
         self.code
     }
 
@@ -248,10 +253,17 @@ impl Response {
     pub fn oem_specific(&self) -> Option<u32> {
         self.oem_specific
     }
+
+    /// Attach OEM-specific data to this response.
+    #[must_use]
+    pub fn with_oem_specific(mut self, oem: u32) -> Self {
+        self.oem_specific = Some(oem);
+        self
+    }
 }
 
-impl DoipParseable for Request {
-    fn parse(payload: &[u8]) -> crate::Result<Self> {
+impl DoipParseable for RoutingActivationRequest {
+    fn parse(payload: &[u8]) -> Result<Self> {
         let header: [u8; Self::MIN_LEN] = parse_fixed_slice(payload, "RoutingActivation Request")?;
 
         let source_address = u16::from_be_bytes([header[0], header[1]]);
@@ -272,13 +284,13 @@ impl DoipParseable for Request {
     }
 }
 
-impl DoipParseable for Response {
-    fn parse(payload: &[u8]) -> crate::Result<Self> {
+impl DoipParseable for RoutingActivationResponse {
+    fn parse(payload: &[u8]) -> Result<Self> {
         let header: [u8; Self::MIN_LEN] = parse_fixed_slice(payload, "RoutingActivation Response")?;
 
         let tester_address = u16::from_be_bytes([header[0], header[1]]);
         let entity_address = u16::from_be_bytes([header[2], header[3]]);
-        let response_code = ResponseCode::try_from(header[4]).map_err(|e| {
+        let response_code = ActivationResponseCode::try_from(header[4]).map_err(|e| {
             error!(error = %e, "RoutingActivation Response parse failed");
             e
         })?;
@@ -296,7 +308,7 @@ impl DoipParseable for Response {
     }
 }
 
-impl DoipSerializable for Response {
+impl DoipSerializable for RoutingActivationResponse {
     fn serialized_len(&self) -> Option<usize> {
         Some(
             Self::MIN_LEN.saturating_add(if self.oem_specific.is_some() {
@@ -325,37 +337,37 @@ mod tests {
     use crate::doip::{DoipParseable, DoipSerializable};
 
     // Wire-format byte offsets for RoutingActivation Response
-    // Layout: TesterAddr(2) + EntityAddr(2) + ResponseCode(1) + Reserved(4) + OEM(4 optional)
+    // Layout: TesterAddr(2) + EntityAddr(2) + ActivationResponseCode(1) + Reserved(4) + OEM(4 optional)
     const TESTER_ADDR_END: usize = 2;
     const ENTITY_ADDR_END: usize = 4;
     const RESP_CODE_IDX: usize = 4;
-    const OEM_DATA_START: usize = Response::MIN_LEN; // 9
-    const OEM_DATA_END: usize = Response::MAX_LEN; // 13
+    const OEM_DATA_START: usize = RoutingActivationResponse::MIN_LEN; // 9
+    const OEM_DATA_END: usize = RoutingActivationResponse::MAX_LEN; // 13
 
     #[test]
     fn response_code_success_check() {
-        assert!(ResponseCode::SuccessfullyActivated.is_success());
-        assert!(ResponseCode::ConfirmationRequired.is_success());
-        assert!(!ResponseCode::UnknownSourceAddress.is_success());
-        assert!(!ResponseCode::TlsRequired.is_success());
+        assert!(ActivationResponseCode::SuccessfullyActivated.is_success());
+        assert!(ActivationResponseCode::ConfirmationRequired.is_success());
+        assert!(!ActivationResponseCode::UnknownSourceAddress.is_success());
+        assert!(!ActivationResponseCode::TlsRequired.is_success());
     }
 
     #[test]
     fn response_code_values() {
-        assert_eq!(ResponseCode::UnknownSourceAddress as u8, 0x00);
-        assert_eq!(ResponseCode::SuccessfullyActivated as u8, 0x10);
-        assert_eq!(ResponseCode::ConfirmationRequired as u8, 0x11);
+        assert_eq!(ActivationResponseCode::UnknownSourceAddress as u8, 0x00);
+        assert_eq!(ActivationResponseCode::SuccessfullyActivated as u8, 0x10);
+        assert_eq!(ActivationResponseCode::ConfirmationRequired as u8, 0x11);
     }
 
     #[test]
     fn parse_minimal_request() {
         let payload = [0x0E, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let req = Request::parse(&payload).unwrap();
+        let req = RoutingActivationRequest::parse(&payload).unwrap();
 
-        assert_eq!(req.source_address, 0x0E80);
-        assert_eq!(req.activation_type, ActivationType::Default);
-        assert_eq!(req.reserved, 0);
-        assert!(req.oem_specific.is_none());
+        assert_eq!(req.source_address(), 0x0E80);
+        assert_eq!(req.activation_type(), ActivationType::Default);
+        assert_eq!(req.reserved(), 0);
+        assert!(req.oem_specific().is_none());
     }
 
     #[test]
@@ -363,65 +375,69 @@ mod tests {
         let payload = [
             0x0E, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF,
         ];
-        let req = Request::parse(&payload).unwrap();
-        assert_eq!(req.oem_specific, Some(0xDEAD_BEEF));
+        let req = RoutingActivationRequest::parse(&payload).unwrap();
+        assert_eq!(req.oem_specific(), Some(0xDEAD_BEEF));
     }
 
     #[test]
     fn parse_wwh_obd_request() {
         let payload = [0x0F, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00];
-        let req = Request::parse(&payload).unwrap();
-        assert_eq!(req.activation_type, ActivationType::WwhObd);
+        let req = RoutingActivationRequest::parse(&payload).unwrap();
+        assert_eq!(req.activation_type(), ActivationType::WwhObd);
     }
 
     #[test]
     fn reject_short_request() {
         let short = [0x0E, 0x80, 0x00, 0x00];
-        assert!(Request::parse(&short).is_err());
+        assert!(RoutingActivationRequest::parse(&short).is_err());
     }
 
     #[test]
     fn reject_unknown_activation_type() {
         // 0x99 is not a valid ActivationType — parse must fail, not silently accept
         let payload = [0x0E, 0x80, 0x99, 0x00, 0x00, 0x00, 0x00];
-        assert!(Request::parse(&payload).is_err());
+        assert!(RoutingActivationRequest::parse(&payload).is_err());
     }
 
     #[test]
     fn build_success_response() {
-        let resp = Response::success(0x0E80, 0x1000);
-        assert_eq!(resp.tester_address, 0x0E80);
-        assert_eq!(resp.entity_address, 0x1000);
+        let resp = RoutingActivationResponse::success(0x0E80, 0x1000);
+        assert_eq!(resp.tester_address(), 0x0E80);
+        assert_eq!(resp.entity_address(), 0x1000);
         assert!(resp.is_success());
     }
 
     #[test]
     fn build_denial_response() {
-        let resp = Response::denial(0x0E80, 0x1000, ResponseCode::AllSocketsRegistered);
+        let resp = RoutingActivationResponse::denial(
+            0x0E80,
+            0x1000,
+            ActivationResponseCode::AllSocketsRegistered,
+        );
         assert!(!resp.is_success());
     }
 
     #[test]
     fn serialize_response() {
-        let resp = Response::success(0x0E80, 0x1000);
+        let resp = RoutingActivationResponse::success(0x0E80, 0x1000);
         let bytes = resp.to_bytes();
 
-        assert_eq!(bytes.len(), Response::MIN_LEN);
+        assert_eq!(bytes.len(), RoutingActivationResponse::MIN_LEN);
         assert_eq!(&bytes[..TESTER_ADDR_END], &[0x0E, 0x80]);
         assert_eq!(&bytes[TESTER_ADDR_END..ENTITY_ADDR_END], &[0x10, 0x00]);
         assert_eq!(
             bytes[RESP_CODE_IDX],
-            ResponseCode::SuccessfullyActivated as u8
+            ActivationResponseCode::SuccessfullyActivated as u8
         );
     }
 
     #[test]
     fn serialize_response_with_oem() {
-        let mut resp = Response::success(0x0E80, 0x1000);
-        resp.oem_specific = Some(0x1234_5678);
+        let resp =
+            RoutingActivationResponse::success(0x0E80, 0x1000).with_oem_specific(0x1234_5678);
         let bytes = resp.to_bytes();
 
-        assert_eq!(bytes.len(), Response::MAX_LEN);
+        assert_eq!(bytes.len(), RoutingActivationResponse::MAX_LEN);
         assert_eq!(
             &bytes[OEM_DATA_START..OEM_DATA_END],
             &[0x12, 0x34, 0x56, 0x78]
@@ -431,34 +447,41 @@ mod tests {
     #[test]
     fn parse_success_response() {
         let payload = [0x0E, 0x80, 0x10, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00];
-        let resp = Response::parse(&payload).unwrap();
+        let resp = RoutingActivationResponse::parse(&payload).unwrap();
         assert!(resp.is_success());
-        assert_eq!(resp.tester_address, 0x0E80);
-        assert_eq!(resp.entity_address, 0x1000);
+        assert_eq!(resp.tester_address(), 0x0E80);
+        assert_eq!(resp.entity_address(), 0x1000);
     }
 
     #[test]
     fn parse_denial_response() {
         let payload = [0x0E, 0x80, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00];
-        let resp = Response::parse(&payload).unwrap();
+        let resp = RoutingActivationResponse::parse(&payload).unwrap();
         assert!(!resp.is_success());
-        assert_eq!(resp.response_code(), ResponseCode::AllSocketsRegistered);
+        assert_eq!(
+            resp.response_code(),
+            ActivationResponseCode::AllSocketsRegistered
+        );
     }
 
     #[test]
     fn roundtrip_response() {
-        let original = Response::success(0x0E80, 0x1000);
+        let original = RoutingActivationResponse::success(0x0E80, 0x1000);
         let bytes = original.to_bytes();
-        let parsed = Response::parse(&bytes).unwrap();
+        let parsed = RoutingActivationResponse::parse(&bytes).unwrap();
         assert_eq!(original, parsed);
     }
 
     #[test]
     fn roundtrip_response_with_oem() {
-        let mut original = Response::denial(0x0F00, 0x2000, ResponseCode::MissingAuthentication);
+        let mut original = RoutingActivationResponse::denial(
+            0x0F00,
+            0x2000,
+            ActivationResponseCode::MissingAuthentication,
+        );
         original.oem_specific = Some(0xCAFE_BABE);
         let bytes = original.to_bytes();
-        let parsed = Response::parse(&bytes).unwrap();
+        let parsed = RoutingActivationResponse::parse(&bytes).unwrap();
         assert_eq!(original, parsed);
     }
 }

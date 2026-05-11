@@ -10,6 +10,10 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+//! `DoIP` server library (ISO 13400-2:2019 / ISO 14229-1:2020).
+//!
+//! Provides TCP framing ([`doip::DoipCodec`]), protocol parsing, session
+//! management, and a [`uds::UdsHandler`] extension point for UDS processing.
 /// Core DoIP protocol types, codec, and wire-format handlers (ISO 13400-2:2019).
 pub mod doip;
 /// Error types and the crate-level [`Result`] alias.

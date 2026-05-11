@@ -36,6 +36,7 @@ use super::{
     routing_activation, vehicle_id,
 };
 use crate::DoipError;
+use crate::Result;
 
 /// A fully-parsed `DoIP` message payload.
 ///
@@ -44,27 +45,27 @@ use crate::DoipError;
 #[derive(Debug, Clone)]
 pub enum DoipPayload {
     /// `0x0007` – Alive Check Request (zero-length payload)
-    AliveCheckRequest(alive_check::Request),
+    AliveCheckRequest(alive_check::AliveCheckRequest),
     /// `0x0008` – Alive Check Response
-    AliveCheckResponse(alive_check::Response),
+    AliveCheckResponse(alive_check::AliveCheckResponse),
     /// `0x0005` – Routing Activation Request
-    RoutingActivationRequest(routing_activation::Request),
+    RoutingActivationRequest(routing_activation::RoutingActivationRequest),
     /// `0x0006` – Routing Activation Response
-    RoutingActivationResponse(routing_activation::Response),
+    RoutingActivationResponse(routing_activation::RoutingActivationResponse),
     /// `0x8001` – Diagnostic Message (UDS data)
-    DiagnosticMessage(diagnostic_message::Message),
+    DiagnosticMessage(diagnostic_message::DiagnosticMessage),
     /// `0x8002` – Diagnostic Message Positive Acknowledgement
     DiagnosticMessagePositiveAck(diagnostic_message::DiagnosticAck),
     /// `0x8003` – Diagnostic Message Negative Acknowledgement
     DiagnosticMessageNegativeAck(diagnostic_message::DiagnosticAck),
     /// `0x0001` – Vehicle Identification Request (no filter)
-    VehicleIdentificationRequest(vehicle_id::Request),
+    VehicleIdentificationRequest(vehicle_id::VehicleIdRequest),
     /// `0x0002` – Vehicle Identification Request filtered by EID
-    VehicleIdentificationRequestWithEid(vehicle_id::RequestWithEid),
+    VehicleIdentificationRequestWithEid(vehicle_id::VehicleIdRequestWithEid),
     /// `0x0003` – Vehicle Identification Request filtered by VIN
-    VehicleIdentificationRequestWithVin(vehicle_id::RequestWithVin),
+    VehicleIdentificationRequestWithVin(vehicle_id::VehicleIdRequestWithVin),
     /// `0x0004` – Vehicle Identification Response / Announce
-    VehicleIdentificationResponse(vehicle_id::Response),
+    VehicleIdentificationResponse(vehicle_id::VehicleIdResponse),
     /// `0x0000` – Generic `DoIP` Header Negative Acknowledgement
     GenericNack(GenericNackCode),
 }
@@ -79,28 +80,28 @@ impl DoipPayload {
     ///
     /// Returns a more specific [`DoipError`] (e.g. [`DoipError::PayloadTooShort`])
     /// when the payload bytes are present but malformed.
-    pub fn parse(msg: &DoipMessage) -> crate::Result<Self> {
+    pub fn parse(msg: &DoipMessage) -> Result<Self> {
         let payload = msg.payload().as_ref();
 
         let payload_type = msg
             .payload_type()
-            .ok_or(DoipError::UnknownPayloadType(msg.header().payload_type()))?;
+            .ok_or_else(|| DoipError::UnknownPayloadType(msg.header().payload_type()))?;
 
         match payload_type {
             PayloadType::AliveCheckRequest => Ok(Self::AliveCheckRequest(
-                alive_check::Request::parse(payload)?,
+                alive_check::AliveCheckRequest::parse(payload)?,
             )),
             PayloadType::AliveCheckResponse => Ok(Self::AliveCheckResponse(
-                alive_check::Response::parse(payload)?,
+                alive_check::AliveCheckResponse::parse(payload)?,
             )),
             PayloadType::RoutingActivationRequest => Ok(Self::RoutingActivationRequest(
-                routing_activation::Request::parse(payload)?,
+                routing_activation::RoutingActivationRequest::parse(payload)?,
             )),
             PayloadType::RoutingActivationResponse => Ok(Self::RoutingActivationResponse(
-                routing_activation::Response::parse(payload)?,
+                routing_activation::RoutingActivationResponse::parse(payload)?,
             )),
             PayloadType::DiagnosticMessage => Ok(Self::DiagnosticMessage(
-                diagnostic_message::Message::parse(payload)?,
+                diagnostic_message::DiagnosticMessage::parse(payload)?,
             )),
             PayloadType::DiagnosticMessagePositiveAck => Ok(Self::DiagnosticMessagePositiveAck(
                 diagnostic_message::DiagnosticAck::parse_positive(payload)?,
@@ -109,20 +110,20 @@ impl DoipPayload {
                 diagnostic_message::DiagnosticAck::parse_negative(payload)?,
             )),
             PayloadType::VehicleIdentificationRequest => Ok(Self::VehicleIdentificationRequest(
-                vehicle_id::Request::parse(payload)?,
+                vehicle_id::VehicleIdRequest::parse(payload)?,
             )),
             PayloadType::VehicleIdentificationRequestWithEid => {
                 Ok(Self::VehicleIdentificationRequestWithEid(
-                    vehicle_id::RequestWithEid::parse(payload)?,
+                    vehicle_id::VehicleIdRequestWithEid::parse(payload)?,
                 ))
             }
             PayloadType::VehicleIdentificationRequestWithVin => {
                 Ok(Self::VehicleIdentificationRequestWithVin(
-                    vehicle_id::RequestWithVin::parse(payload)?,
+                    vehicle_id::VehicleIdRequestWithVin::parse(payload)?,
                 ))
             }
             PayloadType::VehicleIdentificationResponse => Ok(Self::VehicleIdentificationResponse(
-                vehicle_id::Response::parse(payload)?,
+                vehicle_id::VehicleIdResponse::parse(payload)?,
             )),
             PayloadType::GenericNack => {
                 let byte = payload.first().copied().ok_or(DoipError::PayloadTooShort {
@@ -202,7 +203,7 @@ mod tests {
     #[test]
     fn routing_activation_response_roundtrip() {
         use crate::doip::DoipSerializable;
-        let resp = routing_activation::Response::success(0x0E80, 0x1000);
+        let resp = routing_activation::RoutingActivationResponse::success(0x0E80, 0x1000);
         let msg = make_msg(PayloadType::RoutingActivationResponse, resp.to_bytes());
         let parsed = DoipPayload::parse(&msg).unwrap();
         assert!(matches!(parsed, DoipPayload::RoutingActivationResponse(_)));

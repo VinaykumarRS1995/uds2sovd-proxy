@@ -1,0 +1,155 @@
+@startuml DoIP Server Flowchart
+
+skinparam backgroundColor #FAFAFA
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #4A7CC7
+  FontSize 12
+  ArrowColor #4A7CC7
+  StartColor #4A7CC7
+  EndColor #C0392B
+  DiamondBackgroundColor #FFF9E3
+  DiamondBorderColor #E67E22
+}
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #F9A825
+}
+
+start
+
+:Server starts;
+note right: ServerConfig::from_file()\nor ServerConfig::default()
+
+:Bind TCP socket\non config.tcp_addr;
+
+repeat
+
+  :Accept TCP connection\n(peer_addr);
+
+  :SessionManager::create_session(peer_addr);
+  note right: Session { state=Connected\n  tester_address=0 }
+
+  fork
+    :Spawn Tokio task\nper connection;
+  fork again
+    :Continue accepting\nnew connections;
+  end fork
+
+  ' ── Per-connection task ──
+
+  repeat
+
+    :Wait for bytes on TCP stream;
+
+    :DoipCodec::decode(src: BytesMut);
+
+    if (src.len < 8 bytes?) then (yes)
+      :return Ok(None)\nwait for more data;
+      stop
+    else (no)
+    endif
+
+    :DoipHeader::parse(header_slice);
+
+    if (Header valid?\nversion in {0x01,0x02,0x03,0xFF}\nversion XOR inv == 0xFF) then (no)
+      :return Err(InvalidData)\nGenericNack in log;
+      :Close TCP connection;
+      stop
+    else (yes)
+    endif
+
+    if (payload_length > max_payload_size?) then (yes)
+      :return Err(MessageTooLarge)\nClose TCP connection;
+      stop
+    else (no)
+    endif
+
+    if (src.len < header + payload_length?) then (yes)
+      :return Ok(None)\nwait for more data;
+      stop
+    else (no)
+    endif
+
+    :split_to → DoipMessage\n{ header, payload: Bytes }]
+
+    :DoipPayload::parse(DoipMessage);
+
+    if (payload_type known?) then (no)
+      :DoipError::UnknownPayloadType;
+      :Send GenericNack(UnknownPayloadType);
+    else (yes)
+
+      switch (payload_type?)
+
+      case (0x0005\nRoutingActivationRequest)
+        :RoutingActivationRequest::parse(payload);
+        if (Session already RoutingActive\nwith same address?) then (yes)
+          :RoutingActivationResponse::denial(\n  SourceAddressAlreadyActive);
+        elseif (Max connections reached?) then (yes)
+          :RoutingActivationResponse::denial(\n  AllSocketsRegistered);
+        else (no)
+          :SessionManager::update_session(\n  |s| s.activate_routing(src_addr));
+          note right: Session.state = RoutingActive\nSession.tester_address = src_addr
+          :RoutingActivationResponse::success(\n  tester_addr, entity_addr);
+        endif
+        :DoipCodec::encode(RoutingActivationResponse);
+        :Send bytes on TCP;
+
+      case (0x0007\nAliveCheckRequest)
+        :AliveCheckRequest::parse(payload)\n[zero-length, always Ok];
+        :AliveCheckResponse::new(\n  session.tester_address());
+        :to_bytes() → [addr_hi, addr_lo];
+        :DoipCodec::encode(AliveCheckResponse\ntype=0x0008);
+        :Send 10 bytes on TCP;
+
+      case (0x0008\nAliveCheckResponse)
+        :AliveCheckResponse::parse(payload)\n→ tester_address: u16;
+        if (tester_address ==\nsession.tester_address()?) then (yes)
+          :Reset T_TCP_General_Inactivity timer;
+        else (no)
+          :Log mismatch\nClose TCP connection;
+          stop
+        endif
+
+      case (0x8001\nDiagnosticMessage)
+        if (session.is_routing_active()?) then (no)
+          :DiagnosticAck::negative(\n  InvalidSourceAddress);
+          :Send DiagnosticMessageNegativeAck\n(type=0x8003);
+        else (yes)
+          :DiagnosticMessage::parse(payload)\n→ SA, TA, user_data;
+          :DiagnosticAck::positive(TA, SA);
+          :Send DiagnosticMessagePositiveAck\n(type=0x8002);
+          :UdsRequest::new(SA, TA, user_data);
+          :UdsHandler::handle(UdsRequest)\n[USER IMPLEMENTATION];
+          :UdsResponse → DiagnosticMessage::new(\n  SA=entity, TA=tester, data);
+          :DoipCodec::encode(DiagnosticMessage\ntype=0x8001);
+          :Send UDS response bytes on TCP;
+        endif
+
+      case (0x0001/0x0002/0x0003\nVehicleIdRequest)
+        :VehicleIdRequest::parse(payload);
+        :VehicleIdResponse { VIN, EID, GID\nlogical_address };
+        :Send VehicleIdentificationResponse\n(type=0x0004) via UDP;
+
+      case (other)
+        :Send GenericNack\n(IncorrectPatternFormat);
+
+      endswitch
+
+    endif
+
+  repeat while (TCP connection open?) is (yes)
+  -> no;
+
+  :SessionManager::remove_session(id);
+  note right: Session dropped\nstate=Closed
+
+repeat while (Server running?) is (yes)
+-> no;
+
+:Server shutdown;
+
+stop
+
+@enduml
