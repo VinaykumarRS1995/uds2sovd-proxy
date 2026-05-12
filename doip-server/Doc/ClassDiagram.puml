@@ -1,4 +1,4 @@
-@startuml DoIP Server — Architecture Overview
+@startuml DoIP Server Class Diagram — Architecture Overview
 ' ==========================================================
 ' Crisp layered overview of the DoIP server (ISO 13400-2).
 '
@@ -194,13 +194,13 @@ package "Diagnostic Message  (ISO §7.9)" #EEF4FF {
   class DiagnosticAck {
     source_address: u16
     target_address: u16
-    result: DiagnosticAckResult
+    result: AckResult
     previous_data: Option<Bytes>
     ..
     + positive(src, tgt) : Self
     + negative(src, tgt, code) : Self
   }
-  enum DiagnosticAckResult {
+  enum AckResult {
     Positive               ' 0x00
     Negative(DiagnosticNackCode)
   }
@@ -339,8 +339,8 @@ DoipSerializable .. TraitNote
 ' — Enum ownership —
 RoutingActivationRequest  --> ActivationType
 RoutingActivationResponse --> ActivationResponseCode
-DiagnosticAck             --> DiagnosticAckResult
-DiagnosticAckResult                 --> DiagnosticNackCode
+DiagnosticAck             --> AckResult
+AckResult                 --> DiagnosticNackCode
 
 ' — Server —
 Session       *-- SessionState
