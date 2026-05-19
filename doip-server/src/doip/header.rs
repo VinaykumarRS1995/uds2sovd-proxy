@@ -371,8 +371,6 @@ impl DoipMessage {
     ///
     /// Panics if `payload.len()` exceeds `u32::MAX`. In practice `DoIP` limits
     /// messages to [`MAX_DOIP_MESSAGE_SIZE`] (4 MB) which fits well within `u32`.
-    // TODO(follow-up PR): remove once TCP/UDP handlers call this.
-    #[allow(dead_code)]
     pub(crate) fn with_version(version: u8, payload_type: PayloadType, payload: Bytes) -> Self {
         Self {
             header: DoipHeader {
