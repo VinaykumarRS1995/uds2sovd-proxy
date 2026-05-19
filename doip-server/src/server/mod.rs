@@ -18,6 +18,8 @@
 pub mod config;
 /// Thread-safe session registry for active DoIP tester connections.
 pub mod session;
+/// UDP vehicle-discovery handler (ISO 13400-2:2019 §8.3 – vehicle identification).
+pub mod udp_handler;
 
 pub use config::ServerConfig;
 pub use session::SessionManager;
