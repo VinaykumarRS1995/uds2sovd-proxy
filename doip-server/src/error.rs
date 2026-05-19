@@ -67,6 +67,18 @@ pub enum DoipError {
 
     #[error("unexpected payload data: expected empty payload, got {actual} bytes")]
     UnexpectedPayload { actual: usize },
+
+    #[error("session not found: {0}")]
+    SessionNotFound(u64),
+
+    #[error("routing not active for this session")]
+    RoutingNotActive,
+
+    #[error("application error: {0}")]
+    ApplicationError(String),
+
+    #[error("alive check timed out — no response from tester")]
+    AliveCheckTimeout,
 }
 
 #[cfg(test)]

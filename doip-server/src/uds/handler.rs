@@ -152,7 +152,13 @@ pub trait UdsHandler: Send + Sync {
     /// Called by the `DoIP` server for every inbound diagnostic message after
     /// routing activation. The implementation should decode the UDS service ID,
     /// execute the requested service, and return a positive or negative response.
-    fn handle(&self, request: UdsRequest) -> UdsResponse;
+    ///
+    /// Returning `Err` causes the server to send a `DiagnosticMessageNegativeAck`
+    /// with code `TargetUnreachable` to the tester.
+    fn handle(
+        &self,
+        request: UdsRequest,
+    ) -> impl std::future::Future<Output = crate::Result<UdsResponse>> + Send;
 }
 
 #[cfg(test)]
