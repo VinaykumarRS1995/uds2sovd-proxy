@@ -22,13 +22,12 @@
 //!
 //! See [`header`](super::header) for the underlying type definitions.
 
-use std::io;
-
 use bytes::BytesMut;
 use tokio_util::codec::{Decoder, Encoder};
 use tracing::{debug, warn};
 
 use super::header::{DOIP_HEADER_LENGTH, DoipHeader, DoipMessage, MAX_DOIP_MESSAGE_SIZE};
+use crate::DoipError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DecodeState {
@@ -82,12 +81,9 @@ impl Default for DoipCodec {
 
 impl Decoder for DoipCodec {
     type Item = DoipMessage;
-    type Error = io::Error;
+    type Error = DoipError;
 
-    fn decode(
-        &mut self,
-        src: &mut BytesMut,
-    ) -> std::result::Result<Option<Self::Item>, Self::Error> {
+    fn decode(&mut self, src: &mut BytesMut) -> crate::Result<Option<DoipMessage>> {
         loop {
             match self.state {
                 DecodeState::Header => {
@@ -98,13 +94,12 @@ impl Decoder for DoipCodec {
                     }
 
                     // Log raw bytes for debugging
-                    let header_slice = src.get(..DOIP_HEADER_LENGTH).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "buffer too short")
-                    })?;
+                    let header_slice = src
+                        .get(..DOIP_HEADER_LENGTH)
+                        .ok_or_else(|| DoipError::InvalidHeader("buffer too short".into()))?;
                     debug!(header_bytes = ?header_slice, "Received raw header bytes");
 
-                    let header = DoipHeader::parse(header_slice)
-                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                    let header = DoipHeader::parse(header_slice)?;
 
                     if let Some(nack_code) = header.validate() {
                         warn!(
@@ -112,21 +107,17 @@ impl Decoder for DoipCodec {
                             header_bytes = ?header_slice,
                             "Header validation failed"
                         );
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!("validation failed: {nack_code:?}"),
-                        ));
+                        return Err(DoipError::InvalidHeader(format!(
+                            "validation failed: {nack_code:?}"
+                        )));
                     }
 
                     if header.payload_length() > self.max_payload_size {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!(
-                                "payload too large: {} > {}",
-                                header.payload_length(),
-                                self.max_payload_size
-                            ),
-                        ));
+                        return Err(DoipError::InvalidHeader(format!(
+                            "payload too large: {} > {}",
+                            header.payload_length(),
+                            self.max_payload_size
+                        )));
                     }
 
                     // Pre-allocate buffer for the complete message (best-effort hint)
@@ -138,9 +129,8 @@ impl Decoder for DoipCodec {
 
                 DecodeState::Payload(header) => {
                     let Some(total_len) = header.message_length() else {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "payload length overflows usize",
+                        return Err(DoipError::InvalidHeader(
+                            "payload length overflows usize".into(),
                         ));
                     };
                     if src.len() < total_len {
@@ -163,13 +153,9 @@ impl Decoder for DoipCodec {
 }
 
 impl Encoder<DoipMessage> for DoipCodec {
-    type Error = io::Error;
+    type Error = DoipError;
 
-    fn encode(
-        &mut self,
-        item: DoipMessage,
-        dst: &mut BytesMut,
-    ) -> std::result::Result<(), Self::Error> {
+    fn encode(&mut self, item: DoipMessage, dst: &mut BytesMut) -> crate::Result<()> {
         dst.reserve(item.message_length());
         item.header.write_to(dst);
         dst.extend_from_slice(&item.payload);
