@@ -25,6 +25,8 @@ workspace = true
 
 [dependencies]
 # ---- async runtime ----
+# net, time, sync: TCP/UDP sockets, inactivity timeouts, session channels.
+tokio = { workspace = true, features = ["net", "time", "sync"] }
 tokio-util = { workspace = true, features = ["codec"] }
 # ---- serialization ----
 serde = { workspace = true, features = ["std", "derive"] }
