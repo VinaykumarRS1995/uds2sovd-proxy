@@ -42,7 +42,7 @@ use crate::Result;
 ///
 /// Each variant corresponds to one [`PayloadType`] and wraps the concrete
 /// struct returned by its [`DoipParseable`] impl.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum DoipPayload {
     /// `0x0007` – Alive Check Request (zero-length payload)
     AliveCheckRequest(alive_check::AliveCheckRequest),

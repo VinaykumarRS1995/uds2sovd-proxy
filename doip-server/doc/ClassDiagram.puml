@@ -1,4 +1,4 @@
-@startuml DoIP Server Class Diagram — Architecture Overview
+@startuml ClassDiagram
 ' ==========================================================
 ' Crisp layered overview of the DoIP server (ISO 13400-2).
 '
@@ -234,19 +234,92 @@ package "Vehicle Identification  (ISO §7.5)" #EEF4FF {
 }
 
 ' ══════════════════════════════════════════════════════════
-' 4. SERVER & SESSION
+' 4. INTERNAL IMPLEMENTATION  (crate-only)
 ' ══════════════════════════════════════════════════════════
-package "Server" #EAFAF1 {
-  class ServerConfig {
-    tcp_addr / udp_addr: SocketAddr
-    logical_address: u16
-    vin: [u8; 17]    eid: [u8; 6]
-    max_connections: usize
-    initial_inactivity_timeout_ms: u64
-    general_inactivity_timeout_ms: u64
+package "Internal Implementation  (- = crate-only)" #EBF5FB {
+
+  class TcpListener {
+    - config: Arc<ServerConfig>
+    - sessions: Arc<SessionManager>
+    - handler: Arc<dyn UdsHandler>
     ..
-    + from_file(path) : Result<Self>
+    + new(config, sessions, handler) : Self
+    + start(token: CancellationToken) : Result<()>
+    - accept_connection() : Result<TcpStream>
   }
+
+  class UdpListener {
+    - config: Arc<ServerConfig>
+    ..
+    + new(config: Arc<ServerConfig>) : Self
+    + start(token: CancellationToken) : Result<()>
+    - receive_message() : Result<DoipMessage>
+    - send_response(peer, response)
+  }
+
+  class TcpConnection {
+    - session_id: u64
+    - codec: DoipCodec
+    - dispatcher: MessageDispatcher
+    - sessions: Arc<SessionManager>
+    ..
+    + run() : Result<()>
+    - handle_message() : Result<()>
+    - send_response(msg: DoipMessage)
+    - send_alive_check()
+    - close()
+  }
+
+  note right of TcpConnection
+    SRP: transport only.
+    send_alive_check() = I/O action.
+    Protocol logic lives in
+    MessageDispatcher handles.
+  end note
+
+  class MessageDispatcher {
+    - routing: RoutingActivationHandler
+    - alive: AliveCheckHandler
+    - diag: Arc<dyn UdsHandler>
+    - sessions: Arc<SessionManager>
+    ..
+    + new(sessions, handler) : Self
+    + dispatch(payload: DoipPayload,\n  session_id: u64) : Result<DoipMessage>
+  }
+
+  note right of MessageDispatcher
+    Strategy pattern:
+    each handler is a focused unit.
+    Only dispatcher mutates
+    session protocol state.
+  end note
+
+  class RoutingActivationHandler {
+    + handle(req, session_id,\n  sessions) : Result<DoipMessage>
+  }
+
+  class AliveCheckHandler {
+    + handle_response(resp, session_id,\n  sessions) : Result<()>
+  }
+
+  class SessionManager {
+    - sessions: Mutex<HashMap<u64, Session>>
+    - next_id: AtomicU64
+    ..
+    + new() : Arc<Self>
+    + create_session(peer_addr: SocketAddr) : Session
+    + get_session(id: u64) : Option<Session>
+    + remove_session(id: u64)
+    + update_session_state(id: u64, tester_addr: u16)
+    + reset_inactivity_timer(id: u64)
+    + check_timeouts(config) : Vec<u64>
+  }
+
+  note right of SessionManager
+    Thread-safe session store.
+    One Session per active TCP connection.
+    Enforces max_connections limit.
+  end note
 
   enum SessionState <<ISO §7.4 lifecycle>> {
     Connected
@@ -255,38 +328,60 @@ package "Server" #EAFAF1 {
   }
 
   class Session {
-    id: u64
-    peer_addr: SocketAddr
-    tester_address: u16
-    state: SessionState
+    - id: u64
+    - peer_addr: SocketAddr
+    - tester_address: u16
+    - state: SessionState
+    - last_activity: Instant
     ..
-    + activate_routing(addr: u16)
     + is_routing_active() : bool
-  }
-
-  class SessionManager {
-    sessions: RwLock<HashMap<u64, Session>>
-    ..
-    + create_session(peer) : Session
-    + update_session(id, f)
-    + remove_session(id)
-    + is_tester_registered(addr: u16) : bool
+    + tester_address() : u16
   }
 }
 
-note right of SessionManager
-  Thread-safe session store.
-  One Session per active TCP connection.
-  Enforces max_connections limit.
-end note
+' ══════════════════════════════════════════════════════════
+' 5. PUBLIC INTERFACE  (user API)
+' ══════════════════════════════════════════════════════════
+package "Public Interface  (+ = user API)" #EAFAF1 {
 
-' ══════════════════════════════════════════════════════════
-' 5. UDS INTEGRATION  (user extension point)
-' ══════════════════════════════════════════════════════════
-package "UDS Integration" #FEF9E7 {
-  interface UdsHandler <<implement to handle UDS services>> {
-    + handle(req: UdsRequest) : UdsResponse
+  class DoipServer {
+    - udp: UdpListener
+    - tcp: TcpListener
+    - token: CancellationToken
+    ..
+    + new(config: Arc<ServerConfig>,\n    handler: Arc<dyn UdsHandler>) : Self
+    + start() : Result<()>
+    + stop()
+    - handle_udp()
+    - handle_tcp()
   }
+
+  class ServerConfig {
+    + tcp_addr: SocketAddr
+    + udp_addr: SocketAddr
+    + logical_address: u16
+    + vin: [u8; 17]
+    + eid: [u8; 6]
+    + gid: [u8; 6]
+    + max_connections: usize
+    + initial_inactivity_ms: u64
+    + general_inactivity_ms: u64
+    ..
+    + from_file(path) : Result<Self>
+    + default() : Self
+  }
+
+  interface UdsHandler <<implement this trait to\nconnect your ECU logic>> {
+    + handle(request: UdsRequest) : Result<UdsResponse>
+  }
+
+  note right of UdsHandler
+    Returns Result — handler
+    can signal ECU errors.
+    Implement this trait to
+    connect your ECU logic.
+  end note
+
   class UdsRequest {
     source_address: u16
     target_address: u16
@@ -294,20 +389,13 @@ package "UDS Integration" #FEF9E7 {
     ..
     + service_id() : Option<u8>
   }
+
   class UdsResponse {
     source_address: u16
     target_address: u16
     payload: Bytes
   }
 }
-
-note right of UdsHandler
-  Extension point for users.
-  Server extracts user_data from DiagnosticMessage,
-  wraps it as UdsRequest, and calls handle().
-  The returned UdsResponse is sent back as
-  a new DiagnosticMessage (type 0x8001).
-end note
 
 ' ══════════════════════════════════════════════════════════
 ' RELATIONSHIPS
@@ -342,10 +430,31 @@ RoutingActivationResponse --> ActivationResponseCode
 DiagnosticAck             --> AckResult
 AckResult                 --> DiagnosticNackCode
 
-' — Server —
-Session       *-- SessionState
-SessionManager "1" o-- "0..*" Session
-ServerConfig  ..> SessionManager : configures
+' — Public API owns listeners —
+DoipServer o-- UdpListener           : owns
+DoipServer o-- TcpListener           : owns
+DoipServer ..> ServerConfig          : Arc<>
+DoipServer ..> UdsHandler            : Arc<dyn>
+
+' — Internal wiring —
+TcpListener   ..> ServerConfig       : Arc<>
+TcpListener   ..> SessionManager     : Arc<>
+TcpListener   ..> UdsHandler         : Arc<dyn>
+TcpListener   ..> TcpConnection      : spawns per accept
+
+UdpListener   ..> ServerConfig       : Arc<>
+
+TcpConnection  o-- DoipCodec         : Arc<>\nlifecycle only
+TcpConnection  o-- MessageDispatcher
+TcpConnection  ..> SessionManager    : Arc<>\nprotocol state only
+
+MessageDispatcher  o-- RoutingActivationHandler : owns
+MessageDispatcher  o-- AliveCheckHandler        : owns
+MessageDispatcher  ..> UdsHandler               : Arc<dyn>
+MessageDispatcher  ..> SessionManager           : Arc<>
+
+SessionManager "1" o-- "0..*" Session  : manages 1..*
+Session        *-- SessionState
 
 ' — UDS bridge —
 DiagnosticMessage ..> UdsRequest  : user_data →

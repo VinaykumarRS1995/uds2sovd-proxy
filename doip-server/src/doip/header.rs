@@ -275,13 +275,6 @@ impl DoipHeader {
         None
     }
 
-    /// Returns `true` if [`validate`](Self::validate) finds no errors in this header.
-    #[must_use]
-    #[cfg(test)]
-    pub(crate) fn is_valid(self) -> bool {
-        self.validate().is_none()
-    }
-
     /// Returns the total message length (header + payload), or `None` if
     /// `payload_length` overflows `usize` (impossible on 32/64-bit platforms,
     /// but handled explicitly to avoid any panic path).
@@ -369,41 +362,6 @@ pub struct DoipMessage {
 }
 
 impl DoipMessage {
-    /// Create a new `DoIP` message with the default protocol version.
-    #[cfg(test)]
-    pub(crate) fn new(payload_type: PayloadType, payload: Bytes) -> Self {
-        Self {
-            header: DoipHeader {
-                version: DEFAULT_PROTOCOL_VERSION,
-                inverse_version: DEFAULT_PROTOCOL_VERSION_INV,
-                payload_type: u16::from(payload_type),
-                payload_length: u32::try_from(payload.len()).expect("test payload fits in u32"),
-            },
-            payload,
-        }
-    }
-
-    /// Create a `DoIP` message with a raw (unparsed) payload type.
-    ///
-    /// This is primarily used for testing unknown/invalid payload types.
-    /// Production code should use `new()` or `with_version()` instead.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `payload.len()` exceeds `u32::MAX`.
-    #[cfg(test)]
-    pub(crate) fn with_raw_payload_type(payload_type: u16, payload: Bytes) -> Self {
-        Self {
-            header: DoipHeader {
-                version: DEFAULT_PROTOCOL_VERSION,
-                inverse_version: DEFAULT_PROTOCOL_VERSION_INV,
-                payload_type,
-                payload_length: u32::try_from(payload.len()).expect("test payload fits in u32"),
-            },
-            payload,
-        }
-    }
-
     /// Returns the decoded `PayloadType`, or `None` if the raw value is not a known type.
     pub fn payload_type(&self) -> Option<PayloadType> {
         PayloadType::try_from(self.header.payload_type).ok()
@@ -439,12 +397,49 @@ impl DoipMessage {
 // ============================================================================
 
 #[cfg(test)]
+// Test helpers index into fixed-size byte slices whose lengths are asserted
+// immediately before the index — safe, but requires the allow.
 #[allow(clippy::indexing_slicing)]
 mod tests {
     use tokio_util::codec::{Decoder, Encoder};
 
     use super::*;
     use crate::doip::codec::DoipCodec;
+
+    impl DoipHeader {
+        /// Returns `true` if [`validate`](Self::validate) finds no errors in this header. Test-only.
+        pub(crate) fn is_valid(self) -> bool {
+            self.validate().is_none()
+        }
+    }
+
+    impl DoipMessage {
+        /// Build a typed `DoIP` message. Test-only.
+        pub(crate) fn new(payload_type: PayloadType, payload: Bytes) -> Self {
+            Self {
+                header: DoipHeader {
+                    version: DEFAULT_PROTOCOL_VERSION,
+                    inverse_version: DEFAULT_PROTOCOL_VERSION_INV,
+                    payload_type: u16::from(payload_type),
+                    payload_length: u32::try_from(payload.len()).expect("test payload fits in u32"),
+                },
+                payload,
+            }
+        }
+
+        /// Build a `DoIP` message with a raw (possibly unknown) payload type. Test-only.
+        pub(crate) fn with_raw_payload_type(payload_type: u16, payload: Bytes) -> Self {
+            Self {
+                header: DoipHeader {
+                    version: DEFAULT_PROTOCOL_VERSION,
+                    inverse_version: DEFAULT_PROTOCOL_VERSION_INV,
+                    payload_type,
+                    payload_length: u32::try_from(payload.len()).expect("test payload fits in u32"),
+                },
+                payload,
+            }
+        }
+    }
 
     // --- Helper to build a valid DoIP header quickly ---
     fn make_header(payload_type: u16, payload_len: u32) -> DoipHeader {

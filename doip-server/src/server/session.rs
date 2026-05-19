@@ -24,11 +24,20 @@ use std::{
 use parking_lot::RwLock;
 use tracing::debug;
 
+/// Strongly-typed session identifier — wraps a monotonic `u64` counter.
+///
+/// Using a newtype prevents accidentally passing a raw integer where a session
+/// ID is expected and makes call sites self-documenting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SessionId(u64);
+
 /// Session states per ISO 13400-2:2019 connection lifecycle
 ///
 /// This is an internal type. External callers should use [`Session::is_routing_active`] instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SessionState {
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
     Connected,
     RoutingActive,
     /// Reserved per ISO 13400-2:2019 §7.4 lifecycle — not yet transitioned to in-process.
@@ -41,9 +50,9 @@ pub(crate) enum SessionState {
 /// Tracks the connection lifecycle from initial TCP connect through routing
 /// activation to eventual disconnect per ISO 13400-2:2019 §7.4.
 #[derive(Debug, Clone)]
-pub struct Session {
+pub(crate) struct Session {
     /// Unique monotonic session identifier assigned at connection time
-    id: u64,
+    id: SessionId,
     /// Remote socket address of the connected tester
     peer_addr: SocketAddr,
     /// Tester logical address registered during routing activation (`0` until activated)
@@ -56,8 +65,10 @@ impl Session {
     /// Create a new session in the [`SessionState::Connected`] state.
     ///
     /// This is `pub(crate)` — sessions are only ever constructed by [`SessionManager`].
+    // Used by `SessionManager::create_session` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
     #[must_use]
-    pub(crate) fn new(id: u64, peer_addr: SocketAddr) -> Self {
+    pub(crate) fn new(id: SessionId, peer_addr: SocketAddr) -> Self {
         Self {
             id,
             peer_addr,
@@ -68,35 +79,43 @@ impl Session {
 
     /// Transition this session to the `RoutingActive` state and record
     /// the tester's logical address.
-    // Used by feat/tcp-handler (TCP connection handler) — not dead.
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
     #[allow(dead_code)]
     pub(crate) fn activate_routing(&mut self, tester_address: u16) {
-        debug!(session_id = self.id, tester_address, "routing activated");
+        debug!(session_id = self.id.0, tester_address, "routing activated");
         self.tester_address = tester_address;
         self.state = SessionState::RoutingActive;
     }
 
     /// Returns `true` if routing has been activated for this session.
+    // Used by `RoutingActivationHandler` in `feat/doip-handler-deps` — not yet wired up.
+    #[allow(dead_code)]
     #[must_use]
-    pub fn is_routing_active(&self) -> bool {
+    pub(crate) fn is_routing_active(&self) -> bool {
         self.state == SessionState::RoutingActive
     }
 
     /// Returns the unique session ID.
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
     #[must_use]
-    pub fn id(&self) -> u64 {
+    pub(crate) fn id(&self) -> SessionId {
         self.id
     }
 
     /// Returns the remote socket address of the connected tester.
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
     #[must_use]
-    pub fn peer_addr(&self) -> SocketAddr {
+    pub(crate) fn peer_addr(&self) -> SocketAddr {
         self.peer_addr
     }
 
     /// Returns the tester logical address (`0` until routing is activated).
+    // Used by `AliveCheckHandler` in `feat/doip-handler-deps` — not yet wired up.
+    #[allow(dead_code)]
     #[must_use]
-    pub fn tester_address(&self) -> u16 {
+    pub(crate) fn tester_address(&self) -> u16 {
         self.tester_address
     }
 
@@ -119,8 +138,11 @@ impl Session {
 /// Access this via the [`Arc`] returned by [`SessionManager::new`].
 #[derive(Debug, Default)]
 struct SessionManagerInner {
-    sessions: HashMap<u64, Session>,
-    addr_to_session: HashMap<SocketAddr, u64>,
+    // Used by `SessionManager` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
+    sessions: HashMap<SessionId, Session>,
+    #[allow(dead_code)]
+    addr_to_session: HashMap<SocketAddr, SessionId>,
 }
 
 /// Thread-safe registry of active `DoIP` tester sessions.
@@ -130,7 +152,10 @@ struct SessionManagerInner {
 /// [`AtomicU64`] counter for session ID allocation.
 #[derive(Debug, Default)]
 pub struct SessionManager {
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
     inner: RwLock<SessionManagerInner>,
+    #[allow(dead_code)]
     next_id: AtomicU64,
 }
 
@@ -142,32 +167,40 @@ impl SessionManager {
     }
 
     /// Register a new session for `peer_addr` and return it.
-    pub fn create_session(&self, peer_addr: SocketAddr) -> Session {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
+    pub(crate) fn create_session(&self, peer_addr: SocketAddr) -> Session {
+        let id = SessionId(self.next_id.fetch_add(1, Ordering::Relaxed));
         let session = Session::new(id, peer_addr);
         {
             let mut inner = self.inner.write();
             inner.sessions.insert(id, session.clone());
             inner.addr_to_session.insert(peer_addr, id);
         }
-        debug!(session_id = id, peer = %peer_addr, "Session created");
+        debug!(session_id = id.0, peer = %peer_addr, "Session created");
         session
     }
 
     /// Look up a session by its numeric ID. Returns `None` if not found.
-    pub fn get_session(&self, id: u64) -> Option<Session> {
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
+    pub(crate) fn get_session(&self, id: SessionId) -> Option<Session> {
         self.inner.read().sessions.get(&id).cloned()
     }
 
     /// Look up a session by the tester's remote address. Returns `None` if not found.
-    pub fn get_session_by_addr(&self, addr: &SocketAddr) -> Option<Session> {
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
+    pub(crate) fn get_session_by_addr(&self, addr: &SocketAddr) -> Option<Session> {
         let inner = self.inner.read();
         let id = inner.addr_to_session.get(addr).copied()?;
         inner.sessions.get(&id).cloned()
     }
 
     /// Apply a mutation `f` to the session with the given `id`. Returns `true` if found.
-    pub fn update_session<F>(&self, id: u64, f: F) -> bool
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
+    pub(crate) fn update_session<F>(&self, id: SessionId, f: F) -> bool
     where
         F: FnOnce(&mut Session),
     {
@@ -182,25 +215,29 @@ impl SessionManager {
     }
 
     /// Remove and return the session with the given `id`, or `None` if not found.
-    pub fn remove_session(&self, id: u64) -> Option<Session> {
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
+    pub(crate) fn remove_session(&self, id: SessionId) -> Option<Session> {
         let session = {
             let mut inner = self.inner.write();
             let session = inner.sessions.remove(&id)?;
             inner.addr_to_session.remove(&session.peer_addr);
             session
         };
-        debug!(session_id = id, peer = %session.peer_addr, "Session removed");
+        debug!(session_id = id.0, peer = %session.peer_addr, "Session removed");
         Some(session)
     }
 
     /// Remove and return the session associated with `addr`, or `None` if not found.
-    pub fn remove_session_by_addr(&self, addr: &SocketAddr) -> Option<Session> {
+    // Used by `TcpConnection` in `feat/tcp-handler` — not yet wired up.
+    #[allow(dead_code)]
+    pub(crate) fn remove_session_by_addr(&self, addr: &SocketAddr) -> Option<Session> {
         let session = {
             let mut inner = self.inner.write();
             let id = inner.addr_to_session.remove(addr)?;
             inner.sessions.remove(&id)?
         };
-        debug!(session_id = session.id, peer = %addr, "Session removed by addr");
+        debug!(session_id = session.id.0, peer = %addr, "Session removed by addr");
         Some(session)
     }
 

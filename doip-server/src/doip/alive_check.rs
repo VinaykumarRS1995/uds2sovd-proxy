@@ -13,7 +13,6 @@
 //! Alive Check handlers (ISO 13400-2)
 
 use bytes::{BufMut, BytesMut};
-use tracing::warn;
 
 use super::{DoipParseable, DoipSerializable, parse_fixed_slice};
 use crate::Result;
@@ -22,8 +21,7 @@ use crate::Result;
 /// a tester is still connected.
 ///
 /// This message carries no payload (zero-length body per ISO 13400-2:2019 §7.6).
-///
-/// `Clone` is derived because [`DoipPayload`](super::payload::DoipPayload) wraps this type and itself derives `Clone`.
+/// It is only parsed inbound; the entity sends it as a bare `DoIP` header with zero payload length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AliveCheckRequest;
 
@@ -33,29 +31,12 @@ impl DoipParseable for AliveCheckRequest {
     }
 }
 
-impl DoipSerializable for AliveCheckRequest {
-    fn serialized_len(&self) -> Option<usize> {
-        Some(0)
-    }
-
-    /// Alive Check Request carries no payload bytes per ISO 13400-2;
-    /// nothing is written to the buffer by design.
-    fn write_to(&self, _buf: &mut BytesMut) {
-        // Intentionally empty: Alive Check Request has a zero-length payload.
-        warn!(
-            "AliveCheckRequest::write_to called — this message has no payload; nothing is written"
-        );
-    }
-}
-
 /// Alive Check Response (payload type `0x0008`) – sent by the tester in reply,
 /// carrying its logical address.
 ///
 /// # Wire Format
 /// Payload: `source_address` (2 bytes, big-endian)
-///
-/// `Clone` is derived because [`DoipPayload`](super::payload::DoipPayload) wraps this type and itself derives `Clone`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct AliveCheckResponse {
     source_address: u16,
 }
@@ -87,18 +68,19 @@ impl AliveCheckResponse {
     pub fn new(source_address: u16) -> Self {
         Self { source_address }
     }
-
-    /// The logical address of the tester that sent this response.
-    #[must_use]
-    pub fn tester_address(&self) -> u16 {
-        self.source_address
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::doip::{DoipParseable, DoipSerializable};
+
+    impl AliveCheckResponse {
+        /// Returns the tester's logical address. Test-only accessor.
+        pub(crate) fn get_address(&self) -> u16 {
+            self.source_address
+        }
+    }
 
     #[test]
     fn parse_request() {
@@ -107,17 +89,10 @@ mod tests {
     }
 
     #[test]
-    fn request_empty_payload() {
-        let req = AliveCheckRequest;
-        let bytes = req.to_bytes();
-        assert!(bytes.is_empty());
-    }
-
-    #[test]
     fn parse_response() {
         let payload = [0x0E, 0x80];
         let resp = AliveCheckResponse::parse(&payload).unwrap();
-        assert_eq!(resp.tester_address(), 0x0E80);
+        assert_eq!(resp.get_address(), 0x0E80);
     }
 
     #[test]

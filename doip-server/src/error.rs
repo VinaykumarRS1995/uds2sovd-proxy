@@ -20,6 +20,7 @@ use thiserror::Error;
 pub type Result<T> = std::result::Result<T, DoipError>;
 
 /// Main `DoIP` Error type
+#[non_exhaustive]
 #[derive(Error, Debug)]
 pub enum DoipError {
     #[error("I/O error: {0}")]

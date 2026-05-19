@@ -37,7 +37,7 @@ fn parse_address_pair(header: [u8; HEADER_BYTES]) -> (u16, u16) {
 ///
 /// Used by [`DiagnosticAck`] to represent either a positive or negative result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiagnosticAckResult {
+pub enum AckResult {
     /// Positive acknowledgment — message was accepted (wire code 0x00).
     Positive,
     /// Negative acknowledgment — message was rejected with the given code.
@@ -148,17 +148,15 @@ impl DiagnosticMessage {
 /// Diagnostic Message Acknowledgment (payload types 0x8002 and 0x8003)
 ///
 /// Represents both positive and negative acknowledgments as defined in
-/// ISO 13400-2:2019. Use [`DiagnosticAckResult`] to distinguish the outcome.
+/// ISO 13400-2:2019. Use [`AckResult`] to distinguish the outcome.
 ///
 /// # Wire Format
 /// Payload: SA(2) + TA(2) + code(1) + optional `previous_diag_data`
-///
-/// `Clone` is derived because [`DoipPayload`](super::payload::DoipPayload) wraps this type and itself derives `Clone`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct DiagnosticAck {
     source_address: u16,
     target_address: u16,
-    result: DiagnosticAckResult,
+    result: AckResult,
     previous_data: Option<Bytes>,
 }
 
@@ -172,7 +170,7 @@ impl DiagnosticAck {
         Self {
             source_address: source,
             target_address: target,
-            result: DiagnosticAckResult::Positive,
+            result: AckResult::Positive,
             previous_data: None,
         }
     }
@@ -183,7 +181,7 @@ impl DiagnosticAck {
         Self {
             source_address: source,
             target_address: target,
-            result: DiagnosticAckResult::Negative(code),
+            result: AckResult::Negative(code),
             previous_data: None,
         }
     }
@@ -202,7 +200,7 @@ impl DiagnosticAck {
 
     /// Returns the acknowledgment result.
     #[must_use]
-    pub fn result(&self) -> DiagnosticAckResult {
+    pub fn result(&self) -> AckResult {
         self.result
     }
 
@@ -222,7 +220,7 @@ impl DiagnosticAck {
         Ok(Self {
             source_address,
             target_address,
-            result: DiagnosticAckResult::Positive,
+            result: AckResult::Positive,
             previous_data,
         })
     }
@@ -243,7 +241,7 @@ impl DiagnosticAck {
         Ok(Self {
             source_address,
             target_address,
-            result: DiagnosticAckResult::Negative(nack_code),
+            result: AckResult::Negative(nack_code),
             previous_data,
         })
     }
@@ -313,8 +311,8 @@ impl DoipSerializable for DiagnosticAck {
         buf.put_u16(self.source_address);
         buf.put_u16(self.target_address);
         buf.put_u8(match self.result {
-            DiagnosticAckResult::Positive => POSITIVE_ACK_CODE,
-            DiagnosticAckResult::Negative(code) => u8::from(code),
+            AckResult::Positive => POSITIVE_ACK_CODE,
+            AckResult::Negative(code) => u8::from(code),
         });
         if let Some(ref data) = self.previous_data {
             buf.extend_from_slice(data);
@@ -383,7 +381,7 @@ mod tests {
         assert_eq!(&bytes[..ADDRESS_BYTES], &[0x10, 0x00]);
         assert_eq!(&bytes[ADDRESS_BYTES..HEADER_BYTES], &[0x0E, 0x80]);
         assert_eq!(bytes[HEADER_BYTES], 0x00); // positive ack wire code
-        assert_eq!(ack.result(), DiagnosticAckResult::Positive);
+        assert_eq!(ack.result(), AckResult::Positive);
     }
 
     #[test]
@@ -396,7 +394,7 @@ mod tests {
         assert_eq!(bytes[HEADER_BYTES], 0x03);
         assert_eq!(
             nack.result(),
-            DiagnosticAckResult::Negative(DiagnosticNackCode::UnknownTargetAddress)
+            AckResult::Negative(DiagnosticNackCode::UnknownTargetAddress)
         );
     }
 
@@ -414,7 +412,7 @@ mod tests {
 
         assert_eq!(ack.source_address(), 0x1000);
         assert_eq!(ack.target_address(), 0x0E80);
-        assert_eq!(ack.result(), DiagnosticAckResult::Positive);
+        assert_eq!(ack.result(), AckResult::Positive);
         assert!(ack.previous_data().is_none());
     }
 
@@ -425,7 +423,7 @@ mod tests {
 
         assert_eq!(
             nack.result(),
-            DiagnosticAckResult::Negative(DiagnosticNackCode::UnknownTargetAddress)
+            AckResult::Negative(DiagnosticNackCode::UnknownTargetAddress)
         );
     }
 
