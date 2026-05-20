@@ -21,18 +21,22 @@ members = ["doip-server"]
 # ---- async runtime ----
 tokio = { version = "1", default-features = false }
 tokio-util = { version = "0.7", default-features = false }
+futures-util = { version = "0.3", default-features = false }
 # ---- serialization ----
 serde = { version = "1.0", default-features = false }
 toml = { version = "0.9", default-features = false }
 # ---- tracing & logging ----
 tracing = { version = "0.1", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false }
 # ---- error handling ----
 thiserror = { version = "2.0", default-features = false }
+anyhow = { version = "1.0", default-features = false }
 # ---- data structures ----
 bytes = { version = "1.0", default-features = false }
 parking_lot = { version = "0.12", default-features = false }
 # ---- utility crates ----
 hex = { version = "0.4", default-features = false }
+clap = { version = "4.4", default-features = false }
 
 # Lints are aligned with shared-lints.toml from:
 # https://github.com/eclipse-opensovd/cicd-workflows/tree/main/shared-lints
