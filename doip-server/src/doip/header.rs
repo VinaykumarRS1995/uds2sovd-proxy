@@ -371,8 +371,6 @@ impl DoipMessage {
     ///
     /// Panics if `payload.len()` exceeds `u32::MAX`. In practice `DoIP` limits
     /// messages to [`MAX_DOIP_MESSAGE_SIZE`] (4 MB) which fits well within `u32`.
-    // TODO(follow-up PR): remove once TCP/UDP handlers call this.
-    #[allow(dead_code)]
     pub(crate) fn with_version(version: u8, payload_type: PayloadType, payload: Bytes) -> Self {
         Self {
             header: DoipHeader {
@@ -681,7 +679,7 @@ mod tests {
 
     #[test]
     fn decode_complete_alive_check_response() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         // AliveCheckResponse with source address 0x0E80
         let mut buf =
             BytesMut::from(&[0x02, 0xFD, 0x00, 0x08, 0x00, 0x00, 0x00, 0x02, 0x0E, 0x80][..]);
@@ -694,7 +692,7 @@ mod tests {
 
     #[test]
     fn wait_for_more_data_when_header_incomplete() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let mut buf = BytesMut::from(&[0x02, 0xFD, 0x00][..]); // Only 3 bytes
 
         assert!(codec.decode(&mut buf).unwrap().is_none());
@@ -703,7 +701,7 @@ mod tests {
 
     #[test]
     fn wait_for_more_data_when_payload_incomplete() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         // Header says 5 bytes payload, but only 2 arrived
         let mut buf =
             BytesMut::from(&[0x02, 0xFD, 0x80, 0x01, 0x00, 0x00, 0x00, 0x05, 0x0E, 0x80][..]);
@@ -713,7 +711,7 @@ mod tests {
 
     #[test]
     fn decode_back_to_back_messages() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let mut buf = BytesMut::from(
             &[
                 // Msg 1: AliveCheckRequest
@@ -733,7 +731,7 @@ mod tests {
 
     #[test]
     fn reject_invalid_header_in_stream() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         // Bad version (0x04 is not valid - only 0x01, 0x02, 0x03, 0xFF are accepted)
         let mut buf = BytesMut::from(&[0x04, 0xFB, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00][..]);
 
@@ -751,7 +749,7 @@ mod tests {
 
     #[test]
     fn encode_diagnostic_message() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let payload = Bytes::from_static(&[0x0E, 0x80, 0x10, 0x01, 0x3E]);
         let msg = DoipMessage::new(PayloadType::DiagnosticMessage, payload);
 
@@ -769,7 +767,7 @@ mod tests {
 
     #[test]
     fn roundtrip_diagnostic_message() {
-        let mut codec = DoipCodec::new();
+        let mut codec = DoipCodec::default();
         let original = DoipMessage::new(
             PayloadType::DiagnosticMessage,
             Bytes::from_static(&[0x0E, 0x80, 0x10, 0x01, 0x22, 0xF1, 0x90]),

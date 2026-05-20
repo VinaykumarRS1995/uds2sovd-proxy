@@ -18,6 +18,10 @@
 /// UDS handler trait and request/response types bridging DoIP and ISO 14229-1.
 pub mod handler;
 
+/// Test-only handlers (dummy ECU and stub) — grouped under a single feature gate.
+#[cfg(any(test, feature = "test-handlers"))]
+pub mod test_handlers;
+
 pub use handler::{UdsHandler, UdsRequest, UdsResponse, service_id};
 
 // No unit tests: this file contains only module declarations and re-exports.
