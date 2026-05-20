@@ -36,15 +36,17 @@ const NRC_SERVICE_NOT_SUPPORTED: u8 = 0x11;
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use doip_server::uds::test_handlers::stub::StubHandler;
 /// use doip_server::uds::{UdsHandler, UdsRequest};
 /// use bytes::Bytes;
 ///
+/// # async fn run() {
 /// let handler = StubHandler::default();
 /// let request = UdsRequest::new(0x0E00, 0x1000, Bytes::from_static(&[0x22, 0xF1, 0x90]));
-/// let response = handler.handle(request);
+/// let response = handler.handle(request).await.unwrap();
 /// assert_eq!(response.payload().as_ref(), &[0x7F, 0x22, 0x11]);
+/// # }
 /// ```
 #[derive(Debug, Clone)]
 pub struct StubHandler {
@@ -73,12 +75,15 @@ impl Default for StubHandler {
 }
 
 impl UdsHandler for StubHandler {
-    fn handle(&self, request: UdsRequest) -> UdsResponse {
+    fn handle(
+        &self,
+        request: UdsRequest,
+    ) -> impl std::future::Future<Output = crate::Result<UdsResponse>> + Send {
         let sid = request.service_id().unwrap_or(0);
         // Negative response format per ISO 14229-1: [0x7F, SID, NRC]
         let payload = Bytes::from(vec![NEGATIVE_RESPONSE_SID, sid, self.nrc]);
-
-        UdsResponse::new(request.target_address(), request.source_address(), payload)
+        let resp = UdsResponse::new(request.target_address(), request.source_address(), payload);
+        std::future::ready(Ok(resp))
     }
 }
 
@@ -86,34 +91,34 @@ impl UdsHandler for StubHandler {
 mod tests {
     use super::*;
 
-    #[test]
-    fn default_nrc_is_service_not_supported() {
+    #[tokio::test]
+    async fn default_nrc_is_service_not_supported() {
         let handler = StubHandler::default();
         let request = UdsRequest::new(0x0E00, 0x1000, Bytes::from_static(&[0x22, 0xF1, 0x90]));
 
-        let response = handler.handle(request);
+        let response = handler.handle(request).await.unwrap();
 
         assert_eq!(response.payload().as_ref(), &[0x7F, 0x22, 0x11]);
         assert_eq!(response.source_address(), 0x1000);
         assert_eq!(response.target_address(), 0x0E00);
     }
 
-    #[test]
-    fn custom_nrc_is_returned() {
+    #[tokio::test]
+    async fn custom_nrc_is_returned() {
         let handler = StubHandler::new(0x13); // incorrectMessageLengthOrInvalidFormat
         let request = UdsRequest::new(0x0E00, 0x1000, Bytes::from_static(&[0x10, 0x01]));
 
-        let response = handler.handle(request);
+        let response = handler.handle(request).await.unwrap();
 
         assert_eq!(response.payload().as_ref(), &[0x7F, 0x10, 0x13]);
     }
 
-    #[test]
-    fn empty_payload_uses_sid_zero() {
+    #[tokio::test]
+    async fn empty_payload_uses_sid_zero() {
         let handler = StubHandler::default();
         let request = UdsRequest::new(0x0E00, 0x1000, Bytes::new());
 
-        let response = handler.handle(request);
+        let response = handler.handle(request).await.unwrap();
 
         assert_eq!(response.payload().as_ref(), &[0x7F, 0x00, 0x11]);
     }

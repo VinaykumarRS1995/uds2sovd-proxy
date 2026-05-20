@@ -34,15 +34,17 @@ const POSITIVE_RESPONSE_SID_OFFSET: u8 = 0x40;
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use doip_server::uds::test_handlers::dummy::DummyEcuHandler;
 /// use doip_server::uds::{UdsHandler, UdsRequest};
 /// use bytes::Bytes;
 ///
+/// # async fn run() {
 /// let handler = DummyEcuHandler::new();
 /// let request = UdsRequest::new(0x0E00, 0x1000, Bytes::from_static(&[0x10, 0x02]));
-/// let response = handler.handle(request);
+/// let response = handler.handle(request).await.unwrap();
 /// assert_eq!(response.payload().as_ref(), &[0x50, 0x02]);
+/// # }
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct DummyEcuHandler;
@@ -63,7 +65,10 @@ impl DummyEcuHandler {
 }
 
 impl UdsHandler for DummyEcuHandler {
-    fn handle(&self, request: UdsRequest) -> UdsResponse {
+    fn handle(
+        &self,
+        request: UdsRequest,
+    ) -> impl std::future::Future<Output = crate::Result<UdsResponse>> + Send {
         let sid = request.service_id().unwrap_or(0);
 
         info!(
@@ -90,11 +95,12 @@ impl UdsHandler for DummyEcuHandler {
             "UDS positive response"
         );
 
-        UdsResponse::new(
+        let resp = UdsResponse::new(
             request.target_address(),
             request.source_address(),
             response_data,
-        )
+        );
+        std::future::ready(Ok(resp))
     }
 }
 
@@ -102,12 +108,12 @@ impl UdsHandler for DummyEcuHandler {
 mod tests {
     use super::*;
 
-    #[test]
-    fn positive_response_with_sub_function() {
+    #[tokio::test]
+    async fn positive_response_with_sub_function() {
         let handler = DummyEcuHandler::new();
         let request = UdsRequest::new(0x0E00, 0x1000, Bytes::from_static(&[0x10, 0x02]));
 
-        let response = handler.handle(request);
+        let response = handler.handle(request).await.unwrap();
 
         // 0x10 + 0x40 = 0x50, sub-function 0x02 echoed
         assert_eq!(response.payload().as_ref(), &[0x50, 0x02]);
@@ -115,12 +121,12 @@ mod tests {
         assert_eq!(response.target_address(), 0x0E00);
     }
 
-    #[test]
-    fn positive_response_without_sub_function() {
+    #[tokio::test]
+    async fn positive_response_without_sub_function() {
         let handler = DummyEcuHandler::new();
         let request = UdsRequest::new(0x0E00, 0x1000, Bytes::from_static(&[0x3E]));
 
-        let response = handler.handle(request);
+        let response = handler.handle(request).await.unwrap();
 
         // 0x3E + 0x40 = 0x7E, no sub-function
         assert_eq!(response.payload().as_ref(), &[0x7E]);
@@ -128,12 +134,12 @@ mod tests {
         assert_eq!(response.target_address(), 0x0E00);
     }
 
-    #[test]
-    fn empty_payload_returns_response_sid_zero() {
+    #[tokio::test]
+    async fn empty_payload_returns_response_sid_zero() {
         let handler = DummyEcuHandler::new();
         let request = UdsRequest::new(0x0E00, 0x1000, Bytes::new());
 
-        let response = handler.handle(request);
+        let response = handler.handle(request).await.unwrap();
 
         // SID = 0, 0x00 + 0x40 = 0x40
         assert_eq!(response.payload().as_ref(), &[0x40]);

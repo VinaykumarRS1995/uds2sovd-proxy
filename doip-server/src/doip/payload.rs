@@ -339,7 +339,7 @@ mod tests {
         let vin = *b"TESTVIN1234567890";
         let eid = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
         let gid = [0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54];
-        let resp = vehicle_id::Response::new(vin, 0x1000, eid, gid);
+        let resp = vehicle_id::VehicleIdResponse::new(vin, 0x1000, eid, gid);
         let msg = make_msg(PayloadType::VehicleIdentificationResponse, resp.to_bytes());
         let parsed = DoipPayload::parse(&msg).unwrap();
         assert!(matches!(
@@ -404,29 +404,29 @@ mod tests {
         let gid = [0xFEu8; 6];
 
         assert_eq!(
-            DoipPayload::AliveCheckRequest(alive_check::Request).payload_type(),
+            DoipPayload::AliveCheckRequest(alive_check::AliveCheckRequest).payload_type(),
             PayloadType::AliveCheckRequest
         );
         assert_eq!(
-            DoipPayload::AliveCheckResponse(alive_check::Response::new(0x0E80)).payload_type(),
+            DoipPayload::AliveCheckResponse(alive_check::AliveCheckResponse::new(0x0E80)).payload_type(),
             PayloadType::AliveCheckResponse
         );
         assert_eq!(
-            DoipPayload::VehicleIdentificationRequest(vehicle_id::Request).payload_type(),
+            DoipPayload::VehicleIdentificationRequest(vehicle_id::VehicleIdRequest).payload_type(),
             PayloadType::VehicleIdentificationRequest
         );
         assert_eq!(
-            DoipPayload::VehicleIdentificationRequestWithEid(vehicle_id::RequestWithEid::new(eid))
+            DoipPayload::VehicleIdentificationRequestWithEid(vehicle_id::VehicleIdRequestWithEid::new(eid))
                 .payload_type(),
             PayloadType::VehicleIdentificationRequestWithEid
         );
         assert_eq!(
-            DoipPayload::VehicleIdentificationRequestWithVin(vehicle_id::RequestWithVin::new(vin))
+            DoipPayload::VehicleIdentificationRequestWithVin(vehicle_id::VehicleIdRequestWithVin::new(vin))
                 .payload_type(),
             PayloadType::VehicleIdentificationRequestWithVin
         );
         assert_eq!(
-            DoipPayload::VehicleIdentificationResponse(vehicle_id::Response::new(
+            DoipPayload::VehicleIdentificationResponse(vehicle_id::VehicleIdResponse::new(
                 vin, 0x1000, eid, gid
             ))
             .payload_type(),
