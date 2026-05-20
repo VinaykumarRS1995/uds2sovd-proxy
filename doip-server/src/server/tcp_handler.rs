@@ -32,7 +32,8 @@
 
 use std::sync::Arc;
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
+use futures_util::{SinkExt as _, StreamExt as _};
 use tokio::{
     net::{TcpListener, TcpStream},
     time::{Duration, timeout},
@@ -42,7 +43,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     doip::{
-        DoipMessage, DoipParseable, DoipSerializable, alive_check,
+        DoipMessage, DoipParseable as _, DoipSerializable, alive_check,
         codec::DoipCodec,
         diagnostic_message::{self, DiagnosticAck, DiagnosticNackCode},
         header::{GenericNackCode, PayloadType},
@@ -55,9 +56,6 @@ use crate::{
     },
     uds::{UdsHandler, UdsRequest},
 };
-
-use bytes::BytesMut;
-use futures_util::{SinkExt as _, StreamExt as _};
 
 /// Run the TCP diagnostic listener.
 ///
