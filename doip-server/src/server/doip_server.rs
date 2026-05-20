@@ -21,8 +21,8 @@
 //! #[derive(Clone)]
 //! struct MyHandler;
 //! impl UdsHandler for MyHandler {
-//!     fn handle(&self, req: UdsRequest) -> UdsResponse {
-//!         UdsResponse::new(req.target_address(), req.source_address(), req.payload().clone())
+//!     fn handle(&self, req: UdsRequest) -> impl std::future::Future<Output = doip_server::Result<UdsResponse>> + Send {
+//!         std::future::ready(Ok(UdsResponse::new(req.target_address(), req.source_address(), req.payload().clone())))
 //!     }
 //! }
 //!
@@ -98,12 +98,15 @@ mod tests {
     #[derive(Clone)]
     struct EchoHandler;
     impl UdsHandler for EchoHandler {
-        fn handle(&self, req: UdsRequest) -> UdsResponse {
-            UdsResponse::new(
+        fn handle(
+            &self,
+            req: UdsRequest,
+        ) -> impl std::future::Future<Output = crate::Result<UdsResponse>> + Send {
+            std::future::ready(Ok(UdsResponse::new(
                 req.target_address(),
                 req.source_address(),
                 req.payload().clone(),
-            )
+            )))
         }
     }
 

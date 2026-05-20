@@ -58,11 +58,18 @@ const NRC_REQUEST_OUT_OF_RANGE: u8 = 0x31;
 const NEGATIVE_RESPONSE_SID: u8 = 0x7F;
 
 impl UdsHandler for PassThroughHandler {
-    fn handle(&self, req: UdsRequest) -> UdsResponse {
+    fn handle(
+        &self,
+        req: UdsRequest,
+    ) -> impl std::future::Future<Output = doip_server::Result<UdsResponse>> + Send {
         let sid = req.service_id().unwrap_or(0x00);
         let payload =
             bytes::Bytes::from(vec![NEGATIVE_RESPONSE_SID, sid, NRC_REQUEST_OUT_OF_RANGE]);
-        UdsResponse::new(req.target_address(), req.source_address(), payload)
+        std::future::ready(Ok(UdsResponse::new(
+            req.target_address(),
+            req.source_address(),
+            payload,
+        )))
     }
 }
 

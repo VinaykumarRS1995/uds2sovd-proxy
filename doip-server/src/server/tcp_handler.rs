@@ -44,12 +44,15 @@ use crate::{
     doip::{
         DoipMessage, DoipParseable, DoipSerializable, alive_check,
         codec::DoipCodec,
-        diagnostic_message::{self, DiagnosticAck, NackCode},
+        diagnostic_message::{self, DiagnosticAck, DiagnosticNackCode},
         header::{GenericNackCode, PayloadType},
         payload::DoipPayload,
-        routing_activation::{self, ResponseCode},
+        routing_activation::{self, ActivationResponseCode},
     },
-    server::{ServerConfig, Session, SessionManager},
+    server::{
+        ServerConfig, SessionManager,
+        session::{Session, SessionId},
+    },
     uds::{UdsHandler, UdsRequest},
 };
 
@@ -113,7 +116,7 @@ pub(crate) async fn handle_connection<H>(
 {
     let session = sessions.create_session(peer_addr);
     let session_id = session.id();
-    info!(session_id, peer = %peer_addr, "DoIP TCP connection established");
+    info!(session_id = ?session_id, peer = %peer_addr, "DoIP TCP connection established");
 
     let initial_timeout = Duration::from_millis(config.initial_inactivity_timeout_ms());
     let general_timeout = Duration::from_millis(config.general_inactivity_timeout_ms());
@@ -124,17 +127,17 @@ pub(crate) async fn handle_connection<H>(
     let first_msg = match timeout(initial_timeout, framed.next()).await {
         Ok(Some(Ok(msg))) => msg,
         Ok(Some(Err(e))) => {
-            warn!(session_id, peer = %peer_addr, error = %e, "framing error on first message");
+            warn!(session_id = ?session_id, peer = %peer_addr, error = %e, "framing error on first message");
             sessions.remove_session(session_id);
             return;
         }
         Ok(None) => {
-            debug!(session_id, peer = %peer_addr, "connection closed before first message");
+            debug!(session_id = ?session_id, peer = %peer_addr, "connection closed before first message");
             sessions.remove_session(session_id);
             return;
         }
         Err(_) => {
-            warn!(session_id, peer = %peer_addr, "T_TCP_Initial timeout, closing");
+            warn!(session_id = ?session_id, peer = %peer_addr, "T_TCP_Initial timeout, closing");
             sessions.remove_session(session_id);
             return;
         }
@@ -145,7 +148,7 @@ pub(crate) async fn handle_connection<H>(
         first_msg.payload_type(),
         Some(PayloadType::RoutingActivationRequest)
     ) {
-        warn!(session_id, peer = %peer_addr, "first message is not RoutingActivationRequest, closing");
+        warn!(session_id = ?session_id, peer = %peer_addr, "first message is not RoutingActivationRequest, closing");
         send_generic_nack(
             &mut framed,
             first_msg.header().version(),
@@ -176,15 +179,15 @@ pub(crate) async fn handle_connection<H>(
         let msg = match timeout(general_timeout, framed.next()).await {
             Ok(Some(Ok(msg))) => msg,
             Ok(Some(Err(e))) => {
-                warn!(session_id, peer = %peer_addr, error = %e, "framing error");
+                warn!(session_id = ?session_id, peer = %peer_addr, error = %e, "framing error");
                 break;
             }
             Ok(None) => {
-                debug!(session_id, peer = %peer_addr, "connection closed by tester");
+                debug!(session_id = ?session_id, peer = %peer_addr, "connection closed by tester");
                 break;
             }
             Err(_) => {
-                warn!(session_id, peer = %peer_addr, "T_TCP_General inactivity timeout, closing");
+                warn!(session_id = ?session_id, peer = %peer_addr, "T_TCP_General inactivity timeout, closing");
                 break;
             }
         };
@@ -207,7 +210,7 @@ pub(crate) async fn handle_connection<H>(
                 }
             }
             Err(e) => {
-                warn!(session_id, error = %e, "unknown payload type");
+                warn!(session_id = ?session_id, error = %e, "unknown payload type");
                 send_generic_nack(&mut framed, ver, GenericNackCode::UnknownPayloadType).await;
                 break;
             }
@@ -215,22 +218,22 @@ pub(crate) async fn handle_connection<H>(
     }
 
     sessions.remove_session(session_id);
-    info!(session_id, peer = %peer_addr, "DoIP TCP connection closed");
+    info!(session_id = ?session_id, peer = %peer_addr, "DoIP TCP connection closed");
 }
 
 /// Handle a Routing Activation Request.  Returns `true` if activation succeeded.
 async fn process_routing_activation(
     framed: &mut Framed<TcpStream, DoipCodec>,
     sessions: &Arc<SessionManager>,
-    session_id: u64,
+    session_id: SessionId,
     msg: DoipMessage,
     config: &ServerConfig,
     version: u8,
 ) -> bool {
-    let req = match routing_activation::Request::parse(msg.payload()) {
+    let req = match routing_activation::RoutingActivationRequest::parse(msg.payload()) {
         Ok(r) => r,
         Err(e) => {
-            warn!(session_id, error = %e, "failed to parse RoutingActivationRequest");
+            warn!(session_id = ?session_id, error = %e, "failed to parse RoutingActivationRequest");
             send_generic_nack(framed, version, GenericNackCode::InvalidPayloadLength).await;
             return false;
         }
@@ -239,14 +242,14 @@ async fn process_routing_activation(
     // Deny if the tester logical address is already active on another socket.
     if sessions.is_tester_registered(req.source_address()) {
         warn!(
-            session_id,
+            session_id = ?session_id,
             tester_address = req.source_address(),
             "tester already registered"
         );
-        let denial = routing_activation::Response::denial(
+        let denial = routing_activation::RoutingActivationResponse::denial(
             req.source_address(),
             config.logical_address(),
-            ResponseCode::SourceAddressAlreadyActive,
+            ActivationResponseCode::SourceAddressAlreadyActive,
         );
         send_serializable(
             framed,
@@ -261,13 +264,15 @@ async fn process_routing_activation(
     // Activate routing for this session.
     sessions.update_session(session_id, |s| s.activate_routing(req.source_address()));
     info!(
-        session_id,
+        session_id = ?session_id,
         tester_address = req.source_address(),
         "routing activated"
     );
 
-    let response =
-        routing_activation::Response::success(req.source_address(), config.logical_address());
+    let response = routing_activation::RoutingActivationResponse::success(
+        req.source_address(),
+        config.logical_address(),
+    );
     send_serializable(
         framed,
         version,
@@ -282,7 +287,7 @@ async fn process_routing_activation(
 async fn dispatch<H>(
     framed: &mut Framed<TcpStream, DoipCodec>,
     sessions: &Arc<SessionManager>,
-    session_id: u64,
+    session_id: SessionId,
     payload: DoipPayload,
     version: u8,
     handler: &H,
@@ -293,10 +298,10 @@ where
 {
     match payload {
         DoipPayload::AliveCheckRequest(_) => {
-            debug!(session_id, "AliveCheckRequest received");
+            debug!(session_id = ?session_id, "AliveCheckRequest received");
             let session = sessions.get_session(session_id);
             let source = session.map_or(config.logical_address(), |s| s.tester_address());
-            let resp = alive_check::Response::new(source);
+            let resp = alive_check::AliveCheckResponse::new(source);
             send_serializable(framed, version, PayloadType::AliveCheckResponse, &resp).await;
             true
         }
@@ -308,13 +313,13 @@ where
 
             if !routing_active {
                 warn!(
-                    session_id,
+                    session_id = ?session_id,
                     "DiagnosticMessage received before routing activation"
                 );
                 let nack = DiagnosticAck::negative(
                     diag.source_address(),
                     diag.target_address(),
-                    NackCode::InvalidSourceAddress,
+                    DiagnosticNackCode::InvalidSourceAddress,
                 );
                 send_serializable(
                     framed,
@@ -342,17 +347,35 @@ where
                 diag.target_address(),
                 diag.user_data().clone(),
             );
-            let uds_resp = handler.handle(uds_req);
+            let uds_resp = match handler.handle(uds_req).await {
+                Ok(r) => r,
+                Err(e) => {
+                    error!(session_id = ?session_id, error = %e, "UDS handler error");
+                    let nack = DiagnosticAck::negative(
+                        diag.source_address(),
+                        diag.target_address(),
+                        DiagnosticNackCode::TargetUnreachable,
+                    );
+                    send_serializable(
+                        framed,
+                        version,
+                        PayloadType::DiagnosticMessageNegativeAck,
+                        &nack,
+                    )
+                    .await;
+                    return false;
+                }
+            };
 
             // Wrap UDS response in a DoIP DiagnosticMessage.
-            let resp_diag = match diagnostic_message::Message::new(
+            let resp_diag = match diagnostic_message::DiagnosticMessage::new(
                 uds_resp.source_address(),
                 uds_resp.target_address(),
                 uds_resp.payload().clone(),
             ) {
                 Ok(m) => m,
                 Err(e) => {
-                    error!(session_id, error = %e, "failed to build DiagnosticMessage response");
+                    error!(session_id = ?session_id, error = %e, "failed to build DiagnosticMessage response");
                     return false;
                 }
             };
@@ -364,7 +387,7 @@ where
             // Routing activation in the main loop means the tester is re-activating.
             // Per ISO 13400-2:2019, treat as protocol error after initial activation.
             warn!(
-                session_id,
+                session_id = ?session_id,
                 "unexpected RoutingActivationRequest after activation"
             );
             send_generic_nack(framed, version, GenericNackCode::InvalidPayloadLength).await;
@@ -372,7 +395,7 @@ where
         }
 
         other => {
-            warn!(session_id, payload_type = ?other.payload_type(), "unexpected payload type, closing");
+            warn!(session_id = ?session_id, payload_type = ?other.payload_type(), "unexpected payload type, closing");
             send_generic_nack(framed, version, GenericNackCode::UnknownPayloadType).await;
             false
         }
@@ -423,9 +446,9 @@ mod tests {
         doip::{
             DoipParseable as _, DoipSerializable, alive_check,
             codec::DoipCodec,
-            diagnostic_message::{self, NackCode},
+            diagnostic_message::{self, DiagnosticNackCode},
             header::{DEFAULT_PROTOCOL_VERSION, DOIP_HEADER_VERSION_MASK, PayloadType},
-            routing_activation,
+            routing_activation::{self, ActivationResponseCode},
         },
         server::{ServerConfig, SessionManager},
         uds::{UdsHandler, UdsRequest, UdsResponse},
@@ -437,12 +460,15 @@ mod tests {
     #[derive(Clone)]
     struct EchoHandler;
     impl UdsHandler for EchoHandler {
-        fn handle(&self, req: UdsRequest) -> UdsResponse {
-            UdsResponse::new(
+        fn handle(
+            &self,
+            req: UdsRequest,
+        ) -> impl std::future::Future<Output = crate::Result<UdsResponse>> + Send {
+            std::future::ready(Ok(UdsResponse::new(
                 req.target_address(),
                 req.source_address(),
                 req.payload().clone(),
-            )
+            )))
         }
     }
 
@@ -562,9 +588,8 @@ mod tests {
         let (mut client, _handle) = connect_pair(Arc::clone(&config), Arc::clone(&sessions)).await;
 
         // Send AliveCheckRequest as first message — must be rejected.
-        let alive = alive_check::Request;
         client
-            .write_all(&encode_payload(PayloadType::AliveCheckRequest, &alive))
+            .write_all(&make_frame(u16::from(PayloadType::AliveCheckRequest), &[]))
             .await
             .unwrap();
 
@@ -631,7 +656,7 @@ mod tests {
 
     #[test]
     fn routing_activation_response_success_fields() {
-        let resp = routing_activation::Response::success(TESTER_ADDR, ENTITY_ADDR);
+        let resp = routing_activation::RoutingActivationResponse::success(TESTER_ADDR, ENTITY_ADDR);
         assert!(resp.is_success());
         assert_eq!(resp.tester_address(), TESTER_ADDR);
         assert_eq!(resp.entity_address(), ENTITY_ADDR);
@@ -639,16 +664,15 @@ mod tests {
 
     #[test]
     fn routing_activation_response_denial_fields() {
-        use crate::doip::routing_activation::ResponseCode;
-        let resp = routing_activation::Response::denial(
+        let resp = routing_activation::RoutingActivationResponse::denial(
             TESTER_ADDR,
             ENTITY_ADDR,
-            ResponseCode::SourceAddressAlreadyActive,
+            ActivationResponseCode::SourceAddressAlreadyActive,
         );
         assert!(!resp.is_success());
         assert_eq!(
             resp.response_code(),
-            ResponseCode::SourceAddressAlreadyActive
+            ActivationResponseCode::SourceAddressAlreadyActive
         );
     }
 
@@ -667,7 +691,7 @@ mod tests {
         let ack = diagnostic_message::DiagnosticAck::negative(
             TESTER_ADDR,
             ENTITY_ADDR,
-            NackCode::InvalidSourceAddress,
+            DiagnosticNackCode::InvalidSourceAddress,
         );
         assert!(matches!(
             ack.result(),
@@ -677,13 +701,13 @@ mod tests {
 
     #[test]
     fn alive_check_response_source() {
-        let r = alive_check::Response::new(TESTER_ADDR);
+        let r = alive_check::AliveCheckResponse::new(TESTER_ADDR);
         assert_eq!(r.source_address(), TESTER_ADDR);
     }
 
     #[test]
     fn encode_payload_routing_activation_response() {
-        let resp = routing_activation::Response::success(TESTER_ADDR, ENTITY_ADDR);
+        let resp = routing_activation::RoutingActivationResponse::success(TESTER_ADDR, ENTITY_ADDR);
         let frame = encode_payload(PayloadType::RoutingActivationResponse, &resp);
         assert!(frame.len() >= DOIP_HEADER_LEN);
         let pt = u16::from_be_bytes([frame[2], frame[3]]);

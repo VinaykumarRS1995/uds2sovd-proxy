@@ -68,6 +68,12 @@ impl AliveCheckResponse {
     pub fn new(source_address: u16) -> Self {
         Self { source_address }
     }
+
+    /// Returns the tester's logical source address.
+    #[must_use]
+    pub fn source_address(&self) -> u16 {
+        self.source_address
+    }
 }
 
 #[cfg(test)]
