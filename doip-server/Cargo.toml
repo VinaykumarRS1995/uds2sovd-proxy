@@ -20,10 +20,6 @@ license.workspace = true
 [lib]
 path = "src/lib.rs"
 
-[[bin]]
-name = "doip-server"
-path = "src/bin/doip_server.rs"
-
 [lints]
 workspace = true
 
