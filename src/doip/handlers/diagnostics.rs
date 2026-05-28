@@ -1,0 +1,108 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ */
+
+use std::sync::Arc;
+
+use crate::doip::{
+    PayloadHandler,
+    constants::{DIAG_ACK_HEADER_LEN, DIAG_MSG_MIN_PAYLOAD_LEN, DIAGNOSTIC_MESSAGE_ACK},
+    error::Error,
+    message::{Response, TcpPayloadType, TcpRequest},
+};
+use crate::proxy::SovdProxy;
+
+/// Handles DiagnosticMessage (0x8001, ISO 13400-2 §9.11).
+/// Forwards UDS bytes to the SOVD proxy and returns the ECU response.
+pub struct DiagnosticsHandler {
+    proxy: Arc<dyn SovdProxy>,
+}
+
+impl DiagnosticsHandler {
+    pub fn new(proxy: Arc<dyn SovdProxy>) -> Self {
+        Self { proxy }
+    }
+
+    /// Protocol logic (ISO 13400-2 #9.11): forward UDS bytes to the SOVD proxy,
+    /// wrap the response in a DiagnosticMessagePositiveAck.
+    fn forward(&self, src: u16, tgt: u16, uds: &[u8]) -> Result<Response, Error> {
+        let ecu_response = self.proxy.forward(uds)?;
+
+        // Payload layout:
+        //   [0..2] source address (server → originally tgt)
+        //   [2..4] target address (client → originally src)
+        //   [4]    ack code: 0x00 = ACK
+        //   [5..]  UDS response data from ECU
+        let mut payload = Vec::with_capacity(DIAG_ACK_HEADER_LEN + ecu_response.len());
+        payload.extend_from_slice(&tgt.to_be_bytes()); // server address
+        payload.extend_from_slice(&src.to_be_bytes()); // client address
+        payload.push(DIAGNOSTIC_MESSAGE_ACK);
+        payload.extend_from_slice(&ecu_response);
+        Ok(Response::new(
+            TcpPayloadType::DiagnosticMessagePositiveAck as u16,
+            payload,
+        ))
+    }
+}
+
+impl PayloadHandler<TcpPayloadType, TcpRequest> for DiagnosticsHandler {
+    fn payload_type(&self) -> TcpPayloadType {
+        TcpPayloadType::DiagnosticMessage
+    }
+
+    fn handle(&self, req: TcpRequest) -> Result<Response, Error> {
+        // Payload layout: source_addr(2) + target_addr(2) + uds_data(N)
+        if req.payload().len() < DIAG_MSG_MIN_PAYLOAD_LEN {
+            return Err(Error::PayloadTooShort {
+                expected: DIAG_MSG_MIN_PAYLOAD_LEN,
+                actual: req.payload().len(),
+            });
+        }
+        let src = u16::from_be_bytes([req.payload()[0], req.payload()[1]]);
+        let tgt = u16::from_be_bytes([req.payload()[2], req.payload()[3]]);
+        self.forward(src, tgt, &req.payload()[4..])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::proxy::mock::MockProxy;
+
+    #[test]
+    fn handle_forwards_uds_and_returns_ack() {
+        let handler = DiagnosticsHandler::new(Arc::new(MockProxy));
+        let uds = vec![0x22, 0xF1, 0x90]; // ReadDataByIdentifier
+        let mut payload = vec![0x00, 0x01, 0x10, 0x00]; // src=0x0001 tgt=0x1000
+        payload.extend_from_slice(&uds);
+
+        let resp = handler
+            .handle(TcpRequest::new(TcpPayloadType::DiagnosticMessage, payload))
+            .unwrap();
+
+        assert_eq!(
+            resp.payload_type(),
+            TcpPayloadType::DiagnosticMessagePositiveAck as u16
+        );
+        assert_eq!(resp.payload()[4], 0x00, "ACK code must be 0x00");
+        assert_eq!(&resp.payload()[5..], &uds, "MockProxy echoes UDS bytes");
+    }
+
+    #[test]
+    fn handle_rejects_short_payload() {
+        let handler = DiagnosticsHandler::new(Arc::new(MockProxy));
+        let resp = handler.handle(TcpRequest::new(
+            TcpPayloadType::DiagnosticMessage,
+            vec![0x00, 0x01],
+        ));
+        assert!(matches!(resp, Err(Error::PayloadTooShort { .. })));
+    }
+}
