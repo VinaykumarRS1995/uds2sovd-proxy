@@ -1,0 +1,136 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ */
+
+use std::net::SocketAddr;
+
+use serde::Deserialize;
+
+use super::defaults;
+use crate::doip::types::{Eid, Gid, LogicalAddress, Vin};
+
+/// Top-level server configuration, split into TCP, UDP, and ECU sections.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ServerConfig {
+    tcp: TcpConfig,
+    udp: UdpConfig,
+    ecu: EcuConfig,
+}
+
+impl ServerConfig {
+    /// Destructure into the three sub-configs.
+    pub fn into_parts(self) -> (TcpConfig, UdpConfig, EcuConfig) {
+        (self.tcp, self.udp, self.ecu)
+    }
+}
+
+/// TCP transport settings: listen address, connection limits, buffer size.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TcpConfig {
+    address: SocketAddr,
+    max_connections: usize,
+    logical_address: LogicalAddress,
+    read_buffer_size: usize,
+}
+
+impl TcpConfig {
+    /// TCP listen address (e.g. `127.0.0.1:13400`).
+    pub fn address(&self) -> SocketAddr {
+        self.address
+    }
+
+    /// Maximum number of concurrent TCP sessions.
+    pub fn max_connections(&self) -> usize {
+        self.max_connections
+    }
+
+    /// This entity's DoIP logical address.
+    pub fn logical_address(&self) -> LogicalAddress {
+        self.logical_address
+    }
+
+    /// TCP read buffer size in bytes.
+    pub fn read_buffer_size(&self) -> usize {
+        self.read_buffer_size
+    }
+}
+
+/// UDP transport settings: listen address and logical address.
+#[derive(Debug, Clone, Deserialize)]
+pub struct UdpConfig {
+    address: SocketAddr,
+    logical_address: LogicalAddress,
+}
+
+impl UdpConfig {
+    /// UDP listen address (e.g. `0.0.0.0:13400`).
+    pub fn address(&self) -> SocketAddr {
+        self.address
+    }
+
+    /// This entity's DoIP logical address.
+    pub fn logical_address(&self) -> LogicalAddress {
+        self.logical_address
+    }
+}
+
+impl Default for TcpConfig {
+    fn default() -> Self {
+        Self {
+            address: defaults::DEFAULT_TCP_ADDRESS,
+            max_connections: defaults::DEFAULT_MAX_CONNECTIONS,
+            logical_address: defaults::DEFAULT_LOGICAL_ADDRESS,
+            read_buffer_size: defaults::DEFAULT_READ_BUFFER_SIZE,
+        }
+    }
+}
+
+impl Default for UdpConfig {
+    fn default() -> Self {
+        Self {
+            address: defaults::DEFAULT_UDP_ADDRESS,
+            logical_address: defaults::DEFAULT_LOGICAL_ADDRESS,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+/// ECU identity settings: VIN, EID, and GID used in vehicle identification responses.
+pub struct EcuConfig {
+    vin: Vin,
+    eid: Eid,
+    gid: Gid,
+}
+
+impl EcuConfig {
+    /// Vehicle Identification Number (17 ASCII characters).
+    pub fn vin(&self) -> Vin {
+        self.vin
+    }
+    /// Entity Identifier (6 bytes, typically MAC address).
+    pub fn eid(&self) -> Eid {
+        self.eid
+    }
+    /// Group Identifier (6 bytes).
+    pub fn gid(&self) -> Gid {
+        self.gid
+    }
+}
+
+impl Default for EcuConfig {
+    fn default() -> Self {
+        Self {
+            vin: defaults::DEFAULT_VIN,
+            eid: defaults::DEFAULT_EID,
+            gid: defaults::DEFAULT_GID,
+        }
+    }
+}
