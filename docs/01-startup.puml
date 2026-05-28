@@ -1,0 +1,62 @@
+@startuml Startup
+title DoIP Server - Startup Flow
+
+<style>
+sequenceDiagram {
+    LineType ortho
+    MessageAlign center
+    ResponseMessageBelowArrow true
+    ParticipantPadding 40
+}
+</style>
+
+participant "Main" as Main
+participant "Server" as Server
+participant "TCP Service" as Tcp
+participant "UDP Service" as Udp
+
+== Load Configuration ==
+
+Main -> Main: load configuration
+|||
+note right of Main
+  CLI config file or defaults
+end note
+
+== Initialize Services ==
+
+Main -> Tcp: create TCP service
+|||
+Main -> Udp: create UDP service
+|||
+Main -> Server: create server
+
+== Start Runtime ==
+
+Main -> Server: start()
+|||
+
+Server -> Tcp: bind TCP listener
+alt TCP bind failure
+  Tcp --> Server: startup error
+  Server --> Main: startup failed
+end
+|||
+
+Server -> Udp: bind UDP socket
+alt UDP bind failure
+  Udp --> Server: startup error
+  Server --> Main: startup failed
+end
+
+== Running State ==
+
+Server -> Tcp: start connection loop
+Server -> Udp: start discovery loop
+|||
+
+note over Tcp, Udp
+  Services running concurrently
+end note
+
+@enduml

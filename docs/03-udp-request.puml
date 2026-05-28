@@ -1,0 +1,36 @@
+@startuml UDP_Request_Handling
+title DoIP Server - UDP Discovery
+
+<style>
+sequenceDiagram {
+    LineType ortho
+    MessageAlign center
+    ResponseMessageBelowArrow true
+    ParticipantPadding 40
+}
+</style>
+
+participant "Client" as Client
+participant "UDP Service" as Udp
+
+== Receive Loop ==
+
+loop waiting for datagrams
+
+    Client -> Udp: discovery request (port 13400)
+
+    alt valid identification request
+        Udp -> Client: vehicle announcement (VIN, EID, address)
+    else EID/VIN does not match
+        note right of Udp
+            silent drop (ISO 7.6.1)
+        end note
+    else entity status request
+        Udp -> Client: node type and capacity
+    else invalid request
+        Udp -> Client: negative acknowledgment
+    end
+
+end
+
+@enduml

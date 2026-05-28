@@ -1,0 +1,62 @@
+@startuml TCP_Connection_Lifecycle
+title DoIP Server - TCP Connection Lifecycle
+
+<style>
+sequenceDiagram {
+    LineType ortho
+    MessageAlign center
+    ResponseMessageBelowArrow true
+    ParticipantPadding 40
+}
+</style>
+
+participant "Client" as Client
+participant "TCP Service" as Tcp
+participant "Session" as Sess
+participant "UDS2SOVD" as Proxy
+
+== Connection Establishment ==
+
+Client -> Tcp: connect (port 13400)
+
+alt maximum sessions reached
+Tcp -> Client: connection rejected
+Tcp ->x Client: close connection
+
+else session accepted
+Tcp -> Sess: spawn session
+end
+
+== Request Processing ==
+
+loop until disconnect or failure
+
+
+Client -> Sess: DoIP request
+
+alt invalid request
+    Sess -> Client: negative acknowledgment
+
+else diagnostic message
+    Sess -> Proxy: forward diagnostic payload
+    Proxy --> Sess: diagnostic response
+    Sess -> Client: diagnostic response
+
+else supported request
+    Sess -> Client: response
+end
+
+note right of Sess
+    communication failure
+    terminates session
+end note
+
+
+end
+
+== Session Cleanup ==
+
+note over Sess
+    session ends
+    slot dropped automatically
+end note
