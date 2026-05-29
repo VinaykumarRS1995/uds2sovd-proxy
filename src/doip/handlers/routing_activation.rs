@@ -23,11 +23,11 @@ impl RoutingActivationHandler {
     /// Returns a RoutingActivationResponse payload.
     fn activate(&self, client_address: u16, _activation_type: u8) -> Response {
         // Payload layout (13 bytes):
-        //   [0..2]  client logical address
-        //   [2..4]  server logical address
-        //   [4]     response code: 0x10 = success
-        //   [5..9]  reserved ISO (0x00000000)
-        //   [9..13] reserved OEM (0x00000000)
+        // [0..2]  client logical address
+        // [2..4]  server logical address
+        // [4]     response code: 0x10 = success
+        // [5..9]  reserved ISO (0x00000000)
+        // [9..13] reserved OEM (0x00000000)
         let mut payload = Vec::with_capacity(13);
         payload.extend_from_slice(&client_address.to_be_bytes());
         payload.extend_from_slice(&self.server_logical_address.to_be_bytes());
@@ -43,16 +43,16 @@ impl PayloadHandler<TcpPayloadType, TcpRequest> for RoutingActivationHandler {
         TcpPayloadType::RoutingActivationRequest
     }
 
-    fn handle(&self, req: TcpRequest) -> Result<Response, Error> {
+    fn handle(&self, tcp_request: TcpRequest) -> Result<Response, Error> {
         // Payload layout (11 bytes): source_addr(2) + activation_type(1) + reserved(8)
-        if req.payload().len() < ROUTING_ACTIVATION_REQUEST_MIN_LEN {
+        if tcp_request.payload().len() < ROUTING_ACTIVATION_REQUEST_MIN_LEN {
             return Err(Error::PayloadTooShort {
                 expected: ROUTING_ACTIVATION_REQUEST_MIN_LEN,
-                actual: req.payload().len(),
+                actual: tcp_request.payload().len(),
             });
         }
-        let client_address = u16::from_be_bytes([req.payload()[0], req.payload()[1]]);
-        let activation_type = req.payload()[2];
+        let client_address = u16::from_be_bytes([tcp_request.payload()[0], tcp_request.payload()[1]]);
+        let activation_type = tcp_request.payload()[2];
         Ok(self.activate(client_address, activation_type))
     }
 }
@@ -77,7 +77,8 @@ mod tests {
             TcpPayloadType::RoutingActivationResponse as u16
         );
         assert_eq!(
-            resp.payload()[4], 0x10,
+            resp.payload()[4],
+            0x10,
             "response code must be 0x10 (success)"
         );
         // client address echoed back

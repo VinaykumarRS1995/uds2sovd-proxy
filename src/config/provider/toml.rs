@@ -27,6 +27,7 @@ impl TomlConfigProvider {
 }
 
 impl ConfigProvider for TomlConfigProvider {
+    // TODO: Replace panics with proper error propagation (Result) for production use.
     fn load(&self) -> ServerConfig {
         let content = std::fs::read_to_string(&self.path)
             .unwrap_or_else(|e| panic!("Failed to read config file {:?}: {}", self.path, e));

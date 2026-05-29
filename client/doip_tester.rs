@@ -15,10 +15,10 @@
 //! # Usage
 //! ```sh
 //! # Terminal 1: start the server
-//! cargo run
+//! cargo run -p doip-server
 //!
 //! # Terminal 2: run the tester
-//! cargo run --example doip_tester
+//! cargo run -p doip-client
 //! ```
 //!
 
@@ -32,7 +32,7 @@ const SERVER_TCP: &str = "127.0.0.1:13400";
 const SERVER_UDP: &str = "127.0.0.1:13400";
 const TIMEOUT: Duration = Duration::from_secs(2);
 
-//   Helpers
+// Helpers
 
 /// Constructs an 8-byte DoIP generic header followed by the payload.
 fn build_frame(payload_type: u16, payload: &[u8]) -> Vec<u8> {
@@ -144,7 +144,7 @@ fn expect_nack(response_type: u16, payload: &[u8], expected_code: u8) -> Result<
     }
 }
 
-//   UDP Tests                     --
+// UDP Tests                     --
 
 /// 0x0001 VehicleIdentificationRequest → 0x0004 VehicleAnnouncement (32 bytes).
 fn test_udp_vehicle_id() -> Result<(), String> {
@@ -198,7 +198,7 @@ fn test_udp_invalid_version() -> Result<(), String> {
     expect_nack(ptype, &payload, 0x00)
 }
 
-//   TCP Tests                     --
+// TCP Tests                     --
 
 /// 0x0005 RoutingActivationRequest → 0x0006 RoutingActivationResponse (code 0x10).
 /// Returns the stream for reuse by subsequent TCP tests.
@@ -263,7 +263,7 @@ fn test_tcp_unknown_payload_type() -> Result<(), String> {
     expect_nack(ptype, &payload, 0x01)
 }
 
-//   Main                       -
+// Main                       -
 
 fn main() {
     println!("=== DoIP Tester ===\n");

@@ -72,6 +72,7 @@ impl Handler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::EcuConfig;
     use crate::doip::UdpDispatcher;
     use crate::doip::handlers::vehicle_identification::IdentifyVehicleHandler;
     use crate::doip::message::UdpPayloadType;
@@ -146,9 +147,11 @@ mod tests {
     fn handle_valid_vin_request_returns_announcement() {
         let mut dispatcher = UdpDispatcher::new();
         dispatcher.register(IdentifyVehicleHandler::new(
-            Vin::new(*b"00000000000000000"),
-            Eid::new([0u8; 6]),
-            Gid::new([0u8; 6]),
+            EcuConfig::new(
+                Vin::new(*b"00000000000000000"),
+                Eid::new([0u8; 6]),
+                Gid::new([0u8; 6]),
+            ),
             LogicalAddress::new(0x0001),
         ));
 

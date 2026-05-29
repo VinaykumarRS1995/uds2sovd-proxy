@@ -13,28 +13,25 @@
 //! Handler for VehicleIdentificationRequestWithVIN (0x0003, ISO 13400-2 §7.6.1.2).
 
 use super::common::create_vi_response;
+use crate::config::EcuConfig;
 use crate::doip::{
     PayloadHandler,
     constants::VIN_LEN,
     error::Error,
     message::{Response, UdpPayloadType, UdpRequest},
-    types::{Eid, Gid, LogicalAddress, Vin},
+    types::{LogicalAddress, Vin},
 };
 
 /// Handles 0x0003 — responds only if the requested VIN matches.
 pub struct IdentifyVehicleByVinHandler {
-    vin: Vin,
-    eid: Eid,
-    gid: Gid,
+    ecu_config: EcuConfig,
     logical_address: LogicalAddress,
 }
 
 impl IdentifyVehicleByVinHandler {
-    pub fn new(vin: Vin, eid: Eid, gid: Gid, logical_address: LogicalAddress) -> Self {
+    pub fn new(ecu_config: EcuConfig, logical_address: LogicalAddress) -> Self {
         Self {
-            vin,
-            eid,
-            gid,
+            ecu_config,
             logical_address,
         }
     }
@@ -45,24 +42,19 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleByVinHandler 
         UdpPayloadType::VehicleIdentificationRequestWithVin
     }
 
-    fn handle(&self, req: UdpRequest) -> Result<Response, Error> {
-        if req.payload().len() != VIN_LEN {
+    fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
+        if udp_request.payload().len() != VIN_LEN {
             return Err(Error::PayloadTooShort {
                 expected: VIN_LEN,
-                actual: req.payload().len(),
+                actual: udp_request.payload().len(),
             });
         }
         let mut bytes = [0u8; 17];
-        bytes.copy_from_slice(req.payload());
-        if Vin::new(bytes) != self.vin {
-            return Err(Error::NoMatch);
+        bytes.copy_from_slice(udp_request.payload());
+        if Vin::new(bytes) != self.ecu_config.vin() {
+            return Err(Error::VinNotMatched);
         }
-        Ok(create_vi_response(
-            &self.vin,
-            &self.eid,
-            &self.gid,
-            self.logical_address,
-        ))
+        Ok(create_vi_response(&self.ecu_config, self.logical_address))
     }
 }
 
@@ -72,7 +64,7 @@ mod tests {
     use super::*;
 
     fn handler() -> IdentifyVehicleByVinHandler {
-        IdentifyVehicleByVinHandler::new(TEST_VIN, TEST_EID, TEST_GID, TEST_ADDR)
+        IdentifyVehicleByVinHandler::new(test_ecu_config(), TEST_ADDR)
     }
 
     #[test]
@@ -90,7 +82,7 @@ mod tests {
             UdpPayloadType::VehicleIdentificationRequestWithVin,
             NON_MATCHING_VIN.as_bytes().to_vec(),
         );
-        assert!(matches!(handler().handle(req), Err(Error::NoMatch)));
+        assert!(matches!(handler().handle(req), Err(Error::VinNotMatched)));
     }
 
     #[test]

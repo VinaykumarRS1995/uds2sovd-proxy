@@ -13,11 +13,11 @@ https://www.apache.org/licenses/LICENSE-2.0
 
 # 🔌 UDS-to-SOVD Proxy 
 
-This repository contains the UDS-to-SOVD Proxy of the [Eclipse OpenSOVD](https://github.com/eclipse-opensovd/uds2sovd-proxy) project.
+This repository contains the UDS-to-SOVD Proxy of the [Eclipse OpenSOVD](https://github.com/eclipse-opensovd) project.
 
 In the SOVD (Service-Oriented Vehicle Diagnostics) context, the UDS-to-SOVD Proxy serves as a protocol translation gateway between legacy UDS (Unified Diagnostic Services) based diagnostic tools and the modern SOVD-based diagnostic architecture.
 
-It accepts UDS requests over DoIP (Diagnostics over IP, [ISO 13400-2](https://www.iso.org/standard/74785.html)), resolves the corresponding SOVD service using the diagnostic description (MDD) of the ECU, and translates them into SOVD REST API calls. The SOVD responses are then encoded back into UDS format and returned to the requesting tool.
+It accepts UDS requests over DoIP (Diagnostics over IP, [ISO 13400-2](https://www.iso.org/standard/74785.html)) and forwards them to an SOVD backend. The SOVD responses are then encoded back into UDS format and returned to the requesting tool.
 
 ```
                       ┌──────────────────────────────────┐
@@ -31,23 +31,22 @@ It accepts UDS requests over DoIP (Diagnostics over IP, [ISO 13400-2](https://ww
                       └──────────────────────────────────┘
 ```
 
-> **Project status:** The UDS2SOVD translation layer currently returns NRC 0x11 (serviceNotSupported) for all diagnostic requests (StubProxy). Real SOVD integration is under development.
 
-## goals
+## Goals
 
 - transparent UDS ↔ SOVD protocol translation
 - high performance (asynchronous I/O)
 - low memory and disk-space consumption
-- safe & secure
+- safe and secure
 - fast startup
 
-## introduction
+## Introduction
 
-The proxy consists of a **DoIP Server** (handles the DoIP wire protocol over TCP :13400 / UDP :13400) and the **UDS2SOVD translation layer** (translates UDS request bytes into SOVD REST API calls using the ECU's MDD diagnostic description).
+The proxy consists of a **DoIP Server** (handles the DoIP wire protocol over TCP :13400 / UDP :13400) and the **UDS2SOVD translation layer** (forwards UDS request bytes to an SOVD backend via the `SovdProxy` trait).
 
-**Discovery** happens over UDP — testers broadcast vehicle identification requests and the server responds with its VIN, EID, and logical address. **Diagnostics** happen over TCP — after a routing activation handshake, the tester sends UDS requests which the server forwards to the UDS2SOVD layer.
+**Discovery** happens over UDP — testers broadcast vehicle identification requests and the server responds with its VIN (Vehicle Identification Number), EID (Entity Identifier), and logical address. **Diagnostics** happen over TCP — after a routing activation handshake, the tester sends UDS requests which the server forwards to the UDS2SOVD layer.
 
-### supported messages
+### Supported Messages
 
 | Payload Type | Name | Transport | Behavior |
 |-------------|------|-----------|----------|
@@ -59,24 +58,24 @@ The proxy consists of a **DoIP Server** (handles the DoIP wire protocol over TCP
 | 0x0007 | AliveCheckRequest | TCP | Confirms connection is live |
 | 0x8001 | DiagnosticMessage | TCP | Forwards UDS payload, returns ECU response |
 
-### usage
+### Usage
 
 1. Run with defaults (TCP `127.0.0.1:13400`, UDP `0.0.0.0:13400`):
    ```sh
-   cargo run
+   cargo run -p doip-server
    ```
-2. Or with a TOML config file:
+2. Or with a TOML config file (see [`sample-doip-server.toml`](sample-doip-server.toml)):
    ```sh
-   cargo run -- path/to/config.toml
+   cargo run -p doip-server -- <path of config toml file>
    ```
 3. Verify with the E2E tester (proxy must be running):
    ```sh
-   cargo run --example doip_tester
+   cargo run -p doip-client
    ```
 
-### configuration
+### Configuration
 
-If no config file is passed, sensible defaults are used:
+If no configuration file is provided, the system will apply default settings:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
@@ -86,38 +85,38 @@ If no config file is passed, sensible defaults are used:
 | Read buffer | `4096` bytes | TCP read chunk size |
 | Logical address | `0x0001` | DoIP entity address |
 | VIN | `00000000000000000` | Vehicle Identification Number |
-| EID | `00:00:00:00:00:00` | Entity ID (MAC address) |
-| GID | `00:00:00:00:00:00` | Group ID |
+| EID | `00:00:00:00:00:00` | Entity Identifier (MAC address) |
+| GID | `00:00:00:00:00:00` | Group Identifier |
 
-## building
+## Building
 
-### prerequisites
+### Prerequisites
 
 Rust toolchain ≥ 1.85 — install via [rustup](https://rustup.rs/).
 
-### build the executable
+### Build the Executable
 
 ```sh
 cargo build --release
 ```
 
-## developing
+## Developing
 
-### pre commit
+### Pre Commit
 
 ```sh
 uv run https://raw.githubusercontent.com/eclipse-opensovd/cicd-workflows/main/run_checks.py
 ```
 
-### codestyle
+### Codestyle
 
-see [codestyle](CODESTYLE.md)
+See [CODESTYLE.md](CODESTYLE.md).
 
-### testing
+### Testing
 
-#### unit tests
+#### Unit Tests
 
-Unittests are placed in the relevant module as usual in rust:
+Unit tests are placed in the relevant module as usual in Rust:
 ```rust
 ...
 #[cfg(test)]
@@ -131,15 +130,14 @@ Run unit tests with:
 cargo test --locked --lib
 ```
 
-#### integration tests
+#### Integration Tests
 
-Start the proxy, then run the E2E tester:
+Open one terminal and start the proxy. Then open a second terminal and run the E2E tester:
 ```sh
-cargo run &
-cargo run --example doip_tester
+cargo run -p doip-server
+cargo run -p doip-client
 ```
 
-## license
+## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
-

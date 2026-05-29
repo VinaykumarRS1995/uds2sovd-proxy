@@ -10,10 +10,30 @@
  * https://www.apache.org/licenses/LICENSE-2.0
  */
 
-//! DoIP server library (ISO 13400-2) — proxies UDS diagnostics to a SOVD backend.
+//! # uds2sovd — DoIP Server Library
 //!
-//! This crate provides the protocol layer, transport layer, configuration, and
-//! proxy interface. The binary entry point lives in `app/main.rs`.
+//! A DoIP (Diagnostics over Internet Protocol) server library that accepts
+//! UDS diagnostic requests from DoIP clients and forwards them to an SOVD backend.
+//!
+//! ## What this library offers
+//!
+//! config: Load server settings (bind addresses, ECU identity) from TOML or in-memory.
+//! doip: DoIP protocol: message parsing, handlers for vehicle identification,
+//!   routing activation, alive check, entity status, and diagnostic messages.
+//! proxy: Forward UDS bytes to an SOVD backend. Implement the SovdProxy trait
+//!   for your backend; StubProxy and MockProxy are provided for development and testing.
+//! server: TCP/UDP transport layer with concurrent listeners and graceful shutdown.
+//! error: Unified error type for protocol and I/O errors.
+//!
+//! ## How to use
+//!
+//! 1. Implement the SovdProxy trait for your SOVD backend.
+//! 2. Create a config (TOML file or in-memory).
+//! 3. Build the server and run it.
+//!
+//! See `app/main.rs` for a working example and `sample-doip-server.toml` for
+//! a reference configuration.
+
 
 pub mod config;
 pub mod doip;

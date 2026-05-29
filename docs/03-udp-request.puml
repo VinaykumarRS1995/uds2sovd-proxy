@@ -1,6 +1,5 @@
 @startuml UDP_Request_Handling
-title DoIP Server - UDP Discovery
-
+title 03-udp-request
 <style>
 sequenceDiagram {
     LineType ortho

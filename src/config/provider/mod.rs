@@ -15,6 +15,7 @@
 
 pub mod in_memory;
 pub mod toml;
+pub use self::toml as Toml_provider;
 
 pub use in_memory::InMemoryConfigProvider;
-pub use toml::TomlConfigProvider;
+pub use Toml_provider::TomlConfigProvider;

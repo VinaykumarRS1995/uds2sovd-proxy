@@ -12,8 +12,8 @@
 
 //! TCP transport — accept loop, session management, and byte-stream framing.
 
-pub mod framer;
-pub mod session;
+mod framer;
+mod session;
 
 use std::io;
 use std::sync::Arc;
@@ -24,7 +24,7 @@ use tokio::net::TcpListener;
 use super::Transport;
 use crate::config::TcpConfig;
 use crate::doip::TcpDispatcher;
-use crate::doip::message::Response;
+use crate::doip::message::{DoipNackCode, Response};
 use session::{Session, SessionManager};
 
 /// TCP transport: binds a listener and spawns one session per accepted connection.
@@ -65,8 +65,7 @@ impl Transport for Tcp {
                     }
                     None => {
                         tracing::warn!(peer = %peer_addr, "connection rejected: max sessions reached");
-                        let nack =
-                            Response::doip_header_nack(crate::doip::constants::NACK_OUT_OF_MEMORY);
+                        let nack = Response::doip_header_nack(DoipNackCode::OutOfMemory);
                         let _ = AsyncWriteExt::write_all(&mut stream, &nack.to_bytes()).await;
                         drop(stream);
                     }

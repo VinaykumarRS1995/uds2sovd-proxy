@@ -17,7 +17,7 @@ use crate::doip::{
     message::{Response, UdpPayloadType, UdpRequest},
 };
 
-//   DoipEntityStatusRequest (0x4001)
+// DoipEntityStatusRequest (0x4001)
 
 /// Handles DoipEntityStatusRequest (ISO 13400-2 §7.6.3).
 /// Reports node type, max TCP sessions, current sessions, and max data size.
@@ -46,11 +46,11 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for EntityStatusHandler {
     /// [1]     max concurrent TCP sockets
     /// [2]     currently open TCP sockets (0 — not tracked at this level)
     /// [3..7]  max data size (u32 big-endian)
-    fn handle(&self, req: UdpRequest) -> Result<Response, Error> {
-        if !req.payload().is_empty() {
+    fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
+        if !udp_request.payload().is_empty() {
             return Err(Error::InvalidPayloadLength {
-                declared: req.payload().len() as u32,
-                actual: req.payload().len(),
+                declared: udp_request.payload().len() as u32,
+                actual: udp_request.payload().len(),
             });
         }
         let mut payload = Vec::with_capacity(ENTITY_STATUS_RESPONSE_LEN);

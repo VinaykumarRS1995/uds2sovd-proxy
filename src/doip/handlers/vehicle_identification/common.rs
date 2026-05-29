@@ -12,14 +12,15 @@
 
 //! Shared response builder for Vehicle Identification handlers (ISO 13400-2 §7.6.2).
 
+use crate::config::EcuConfig;
 use crate::doip::{
     constants::NO_FURTHER_ACTION,
     message::{Response, UdpPayloadType},
-    types::{Eid, Gid, LogicalAddress, Vin},
+    types::LogicalAddress,
 };
 
 /// 17 (VIN) + 2 (addr) + 6 (EID) + 6 (GID) + 1 (action byte) = 32
-pub(super) const VI_RESPONSE_LEN: usize = 32;
+const VI_RESPONSE_LEN: usize = 32;
 
 /// Builds the 32-byte Vehicle Identification Response / Announcement payload.
 ///
@@ -32,22 +33,21 @@ pub(super) const VI_RESPONSE_LEN: usize = 32;
 /// [31]     further action required (0x00 = none)
 /// ```
 pub(super) fn create_vi_response(
-    vin: &Vin,
-    eid: &Eid,
-    gid: &Gid,
+    ecu_config: &EcuConfig,
     logical_address: LogicalAddress,
 ) -> Response {
     let mut payload = Vec::with_capacity(VI_RESPONSE_LEN);
-    payload.extend_from_slice(vin.as_bytes());
+    payload.extend_from_slice(ecu_config.vin().as_bytes());
     payload.extend_from_slice(&logical_address.to_be_bytes());
-    payload.extend_from_slice(eid.as_bytes());
-    payload.extend_from_slice(gid.as_bytes());
+    payload.extend_from_slice(ecu_config.eid().as_bytes());
+    payload.extend_from_slice(ecu_config.gid().as_bytes());
     payload.push(NO_FURTHER_ACTION);
     Response::new(UdpPayloadType::VehicleAnnouncementResponse as u16, payload)
 }
 
 #[cfg(test)]
 pub(super) mod fixtures {
+    use crate::config::EcuConfig;
     use crate::doip::types::{Eid, Gid, LogicalAddress, Vin};
 
     /// ISO example VIN (17 ASCII characters, valid format)
@@ -67,6 +67,11 @@ pub(super) mod fixtures {
 
     /// VIN that does NOT match TEST_VIN (valid format, different vehicle)
     pub const NON_MATCHING_VIN: Vin = Vin::new(*b"WVWZZZ3CZWE123456");
+
+    /// Test ECU config with the above VIN, EID, GID
+    pub fn test_ecu_config() -> EcuConfig {
+        EcuConfig::new(TEST_VIN, TEST_EID, TEST_GID)
+    }
 
     /// Expected response payload length
     pub const VI_RESPONSE_LEN: usize = super::VI_RESPONSE_LEN;

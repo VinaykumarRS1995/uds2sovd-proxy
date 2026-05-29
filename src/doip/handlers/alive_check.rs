@@ -41,11 +41,11 @@ impl PayloadHandler<TcpPayloadType, TcpRequest> for AliveCheckHandler {
     fn payload_type(&self) -> TcpPayloadType {
         TcpPayloadType::AliveCheckRequest
     }
-    fn handle(&self, req: TcpRequest) -> Result<Response, Error> {
-        if !req.payload().is_empty() {
+    fn handle(&self, tcp_request: TcpRequest) -> Result<Response, Error> {
+        if !tcp_request.payload().is_empty() {
             return Err(Error::InvalidPayloadLength {
-                declared: req.payload().len() as u32,
-                actual: req.payload().len(),
+                declared: tcp_request.payload().len() as u32,
+                actual: tcp_request.payload().len(),
             });
         }
         Ok(self.respond())

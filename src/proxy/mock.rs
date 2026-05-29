@@ -17,7 +17,7 @@ use super::{SovdProxy, SovdProxyError};
 pub struct MockProxy;
 
 impl SovdProxy for MockProxy {
-    fn forward(&self, uds_request: &[u8]) -> Result<Vec<u8>, SovdProxyError> {
+    fn process(&self, uds_request: &[u8]) -> Result<Vec<u8>, SovdProxyError> {
         Ok(uds_request.to_vec())
     }
 }

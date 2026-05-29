@@ -1,20 +1,53 @@
-use crate::doip::constants::{
-    INVERSE_VERSION, NACK_INCORRECT_PATTERN, NACK_INVALID_PAYLOAD_LENGTH, NACK_MESSAGE_TOO_LARGE,
-    NACK_UNKNOWN_PAYLOAD_TYPE, PROTOCOL_VERSION,
-};
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ */
+
+use crate::doip::constants::{INVERSE_VERSION, PROTOCOL_VERSION};
 use crate::doip::error::Error;
 
+/// Generic DoIP header NACK codes (ISO 13400-2 §9.4, Table 18).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum DoipNackCode {
+    /// Header fields do not match the expected pattern (bad version or inverse byte).
+    IncorrectPattern = 0x00,
+    /// Payload type is not supported by this entity.
+    UnknownPayloadType = 0x01,
+    /// Message is too large to be processed.
+    MessageTooLarge = 0x02,
+    /// Server ran out of memory.
+    OutOfMemory = 0x03,
+    /// Payload length field does not match actual payload size.
+    InvalidPayloadLength = 0x04,
+}
+
+impl From<DoipNackCode> for u8 {
+    fn from(code: DoipNackCode) -> Self {
+        code as u8
+    }
+}
+
 /// Maps a DoIP error to the appropriate generic header NACK code (ISO 13400-2 Table 4).
-pub fn nack_code(err: &Error) -> u8 {
+pub fn nack_code(err: &Error) -> DoipNackCode {
     match err {
-        Error::InvalidHeaderVersion(_) | Error::InvalidInverseVersion(_) => NACK_INCORRECT_PATTERN,
-        Error::UnknownPayloadType(_) => NACK_UNKNOWN_PAYLOAD_TYPE,
-        Error::PayloadTooLarge(_) => NACK_MESSAGE_TOO_LARGE,
-        Error::InvalidPayloadLength { .. } | Error::PayloadTooShort { .. } => {
-            NACK_INVALID_PAYLOAD_LENGTH
+        Error::InvalidHeaderVersion(_) | Error::InvalidInverseVersion(_) => {
+            DoipNackCode::IncorrectPattern
         }
-        Error::Proxy(_) => NACK_INCORRECT_PATTERN,
-        Error::NoMatch => NACK_INCORRECT_PATTERN,
+        Error::UnknownPayloadType(_) => DoipNackCode::UnknownPayloadType,
+        Error::PayloadTooLarge(_) => DoipNackCode::MessageTooLarge,
+        Error::InvalidPayloadLength { .. } | Error::PayloadTooShort { .. } => {
+            DoipNackCode::InvalidPayloadLength
+        }
+        Error::Proxy(_) => DoipNackCode::IncorrectPattern,
+        Error::EIDNotMatched | Error::VinNotMatched => DoipNackCode::IncorrectPattern,
     }
 }
 
@@ -180,8 +213,8 @@ impl Response {
     /// NACK codes: 0x00=incorrect pattern, 0x01=unknown payload type,
     /// 0x02=message too large, 0x03=out of memory, 0x04=invalid payload length.
     ///
-    pub fn doip_header_nack(code: u8) -> Self {
-        Self::new(0x0000, vec![code])
+    pub fn doip_header_nack(code: DoipNackCode) -> Self {
+        Self::new(0x0000, vec![u8::from(code)])
     }
 
     /// The numeric payload type for this response.
@@ -246,7 +279,7 @@ mod tests {
 
     #[test]
     fn nack_response_has_correct_payload_type_and_code() {
-        let resp = Response::doip_header_nack(0x02);
+        let resp = Response::doip_header_nack(DoipNackCode::MessageTooLarge);
         assert_eq!(resp.payload_type(), 0x0000);
         assert_eq!(resp.payload(), &[0x02]);
     }
