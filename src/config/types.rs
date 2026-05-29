@@ -85,10 +85,10 @@ impl UdpConfig {
 impl Default for TcpConfig {
     fn default() -> Self {
         Self {
-            address: defaults::DEFAULT_TCP_ADDRESS,
-            max_connections: defaults::DEFAULT_MAX_CONNECTIONS,
-            logical_address: defaults::DEFAULT_LOGICAL_ADDRESS,
-            read_buffer_size: defaults::DEFAULT_READ_BUFFER_SIZE,
+            address: defaults::TCP_ADDRESS,
+            max_connections: defaults::MAX_CONNECTIONS,
+            logical_address: defaults::LOGICAL_ADDRESS,
+            read_buffer_size: defaults::READ_BUFFER_SIZE,
         }
     }
 }
@@ -96,8 +96,8 @@ impl Default for TcpConfig {
 impl Default for UdpConfig {
     fn default() -> Self {
         Self {
-            address: defaults::DEFAULT_UDP_ADDRESS,
-            logical_address: defaults::DEFAULT_LOGICAL_ADDRESS,
+            address: defaults::UDP_ADDRESS,
+            logical_address: defaults::LOGICAL_ADDRESS,
         }
     }
 }
@@ -111,6 +111,10 @@ pub struct EcuConfig {
 }
 
 impl EcuConfig {
+    /// Create a new ECU config from the given identity fields.
+    pub fn new(vin: Vin, eid: Eid, gid: Gid) -> Self {
+        Self { vin, eid, gid }
+    }
     /// Vehicle Identification Number (17 ASCII characters).
     pub fn vin(&self) -> Vin {
         self.vin
@@ -128,9 +132,9 @@ impl EcuConfig {
 impl Default for EcuConfig {
     fn default() -> Self {
         Self {
-            vin: defaults::DEFAULT_VIN,
-            eid: defaults::DEFAULT_EID,
-            gid: defaults::DEFAULT_GID,
+            vin: defaults::VIN,
+            eid: defaults::EID,
+            gid: defaults::GID,
         }
     }
 }

@@ -81,6 +81,23 @@ where
 }
 
 /// Dispatcher bound to the TCP transport payload types.
+///
+/// # Transport segregation
+///
+/// The generic type parameters prevent registering a handler for the wrong
+/// transport at compile time. For example, a TCP handler cannot be registered
+/// on a UDP dispatcher:
+///
+/// ```compile_fail
+/// use uds2sovd::doip::dispatch::UdpDispatcher;
+/// use uds2sovd::doip::handlers::AliveCheckHandler;
+/// use uds2sovd::doip::types::LogicalAddress;
+///
+/// let mut dispatcher = UdpDispatcher::new();
+/// // AliveCheckHandler implements PayloadHandler<TcpPayloadType, TcpRequest>,
+/// // so this will not compile on a UdpDispatcher.
+/// dispatcher.register(AliveCheckHandler::new(LogicalAddress::new(0x0001)));
+/// ```
 pub type TcpDispatcher = Dispatcher<TcpPayloadType, TcpRequest>;
 
 /// Dispatcher bound to the UDP transport payload types.

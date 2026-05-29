@@ -13,28 +13,25 @@
 //! Handler for VehicleIdentificationRequestWithEID (0x0002, ISO 13400-2 §7.6.1.1).
 
 use super::common::create_vi_response;
+use crate::config::EcuConfig;
 use crate::doip::{
     PayloadHandler,
     constants::EID_LEN,
     error::Error,
     message::{Response, UdpPayloadType, UdpRequest},
-    types::{Eid, Gid, LogicalAddress, Vin},
+    types::{Eid, LogicalAddress},
 };
 
 /// Handles 0x0002 — responds only if the requested EID matches.
 pub struct IdentifyVehicleByEidHandler {
-    vin: Vin,
-    eid: Eid,
-    gid: Gid,
+    ecu_config: EcuConfig,
     logical_address: LogicalAddress,
 }
 
 impl IdentifyVehicleByEidHandler {
-    pub fn new(vin: Vin, eid: Eid, gid: Gid, logical_address: LogicalAddress) -> Self {
+    pub fn new(ecu_config: EcuConfig, logical_address: LogicalAddress) -> Self {
         Self {
-            vin,
-            eid,
-            gid,
+            ecu_config,
             logical_address,
         }
     }
@@ -45,30 +42,25 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleByEidHandler 
         UdpPayloadType::VehicleIdentificationRequestWithEid
     }
 
-    fn handle(&self, req: UdpRequest) -> Result<Response, Error> {
-        if req.payload().len() != EID_LEN {
+    fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
+        if udp_request.payload().len() != EID_LEN {
             return Err(Error::PayloadTooShort {
                 expected: EID_LEN,
-                actual: req.payload().len(),
+                actual: udp_request.payload().len(),
             });
         }
         let requested = Eid::new([
-            req.payload()[0],
-            req.payload()[1],
-            req.payload()[2],
-            req.payload()[3],
-            req.payload()[4],
-            req.payload()[5],
+            udp_request.payload()[0],
+            udp_request.payload()[1],
+            udp_request.payload()[2],
+            udp_request.payload()[3],
+            udp_request.payload()[4],
+            udp_request.payload()[5],
         ]);
-        if requested != self.eid {
-            return Err(Error::NoMatch);
+        if requested != self.ecu_config.eid() {
+            return Err(Error::EIDNotMatched);
         }
-        Ok(create_vi_response(
-            &self.vin,
-            &self.eid,
-            &self.gid,
-            self.logical_address,
-        ))
+        Ok(create_vi_response(&self.ecu_config, self.logical_address))
     }
 }
 
@@ -78,7 +70,7 @@ mod tests {
     use super::*;
 
     fn handler() -> IdentifyVehicleByEidHandler {
-        IdentifyVehicleByEidHandler::new(TEST_VIN, TEST_EID, TEST_GID, TEST_ADDR)
+        IdentifyVehicleByEidHandler::new(test_ecu_config(), TEST_ADDR)
     }
 
     #[test]
@@ -96,7 +88,7 @@ mod tests {
             UdpPayloadType::VehicleIdentificationRequestWithEid,
             NON_MATCHING_EID.as_bytes().to_vec(),
         );
-        assert!(matches!(handler().handle(req), Err(Error::NoMatch)));
+        assert!(matches!(handler().handle(req), Err(Error::EIDNotMatched)));
     }
 
     #[test]

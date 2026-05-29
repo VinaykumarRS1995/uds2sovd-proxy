@@ -20,7 +20,7 @@ use super::{SovdProxy, SovdProxyError};
 pub struct StubProxy;
 
 impl SovdProxy for StubProxy {
-    fn forward(&self, uds_request: &[u8]) -> Result<Vec<u8>, SovdProxyError> {
+    fn process(&self, uds_request: &[u8]) -> Result<Vec<u8>, SovdProxyError> {
         if uds_request.is_empty() {
             return Err(SovdProxyError::InvalidResponse);
         }
@@ -36,13 +36,13 @@ mod tests {
     #[test]
     fn stub_returns_nrc_service_not_supported() {
         let proxy = StubProxy;
-        let resp = proxy.forward(&[0x22, 0xF1, 0x90]).unwrap();
+        let resp = proxy.process(&[0x22, 0xF1, 0x90]).unwrap();
         assert_eq!(resp, vec![0x7F, 0x22, 0x11]);
     }
 
     #[test]
     fn stub_errors_on_empty_request() {
         let proxy = StubProxy;
-        assert!(proxy.forward(&[]).is_err());
+        assert!(proxy.process(&[]).is_err());
     }
 }

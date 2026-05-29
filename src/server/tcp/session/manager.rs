@@ -21,13 +21,13 @@ use crate::doip::message::ConnectionId;
 /// Uses an atomic counter shared with `ConnectionSlot` — when a slot is dropped
 /// (session ends for any reason), the counter decrements automatically. No polling,
 /// no background task, no explicit remove() call needed.
-pub struct SessionManager {
+pub(in crate::server::tcp) struct SessionManager {
     max: usize,
     active: Arc<AtomicUsize>,
 }
 
 impl SessionManager {
-    pub fn new(max: usize) -> Self {
+    pub(in crate::server::tcp) fn new(max: usize) -> Self {
         Self {
             max,
             active: Arc::new(AtomicUsize::new(0)),
@@ -39,7 +39,7 @@ impl SessionManager {
     /// Returns `Some(ConnectionSlot)` if capacity is available, `None` if the
     /// maximum is already reached. The returned slot auto-decrements the counter
     /// when dropped.
-    pub fn try_acquire(&self) -> Option<ConnectionSlot> {
+    pub(in crate::server::tcp) fn try_acquire(&self) -> Option<ConnectionSlot> {
         self.active
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
                 if current < self.max {
@@ -60,7 +60,7 @@ impl SessionManager {
     }
 
     /// Number of sessions currently active.
-    pub fn active_count(&self) -> usize {
+    pub(in crate::server::tcp) fn active_count(&self) -> usize {
         self.active.load(Ordering::SeqCst)
     }
 }

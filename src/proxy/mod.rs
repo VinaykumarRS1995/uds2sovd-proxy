@@ -37,5 +37,5 @@ pub use error::SovdProxyError;
 /// The real implementation (provided separately) will forward requests to a
 /// SOVD server over the vehicle network.
 pub trait SovdProxy: Send + Sync {
-    fn forward(&self, uds_request: &[u8]) -> Result<Vec<u8>, SovdProxyError>;
+    fn process(&self, uds_request: &[u8]) -> Result<Vec<u8>, SovdProxyError>;
 }

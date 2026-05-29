@@ -9,6 +9,16 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-[workspace]
-members = ["src", "app", "client"]
-resolver = "3"
+[package]
+name        = "doip-client"
+version     = "0.1.0"
+edition     = "2024"
+rust-version = "1.85"
+description = "DoIP tester client — exercises the running DoIP server end-to-end"
+
+[[bin]]
+name = "doip-client"
+path = "doip_tester.rs"
+
+[dependencies]
+uds2sovd = { path = "../src", package = "doipserver-lib" }

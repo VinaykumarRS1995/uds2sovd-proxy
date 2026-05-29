@@ -35,6 +35,9 @@ pub enum Error {
     #[error("SOVD proxy error: {0}")]
     Proxy(#[from] SovdProxyError),
 
-    #[error("no matching entity for request")]
-    NoMatch,
+    #[error("no matching EID for request")]
+    EIDNotMatched,
+
+    #[error("no matching VIN for request")]
+    VinNotMatched,
 }

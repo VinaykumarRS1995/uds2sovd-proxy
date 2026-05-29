@@ -34,13 +34,13 @@ impl DiagnosticsHandler {
     /// Protocol logic (ISO 13400-2 #9.11): forward UDS bytes to the SOVD proxy,
     /// wrap the response in a DiagnosticMessagePositiveAck.
     fn forward(&self, src: u16, tgt: u16, uds: &[u8]) -> Result<Response, Error> {
-        let ecu_response = self.proxy.forward(uds)?;
+        let ecu_response = self.proxy.process(uds)?;
 
         // Payload layout:
-        //   [0..2] source address (server → originally tgt)
-        //   [2..4] target address (client → originally src)
-        //   [4]    ack code: 0x00 = ACK
-        //   [5..]  UDS response data from ECU
+        // [0..2] source address (server → originally tgt)
+        // [2..4] target address (client → originally src)
+        // [4]    ack code: 0x00 = ACK
+        // [5..]  UDS response data from ECU
         let mut payload = Vec::with_capacity(DIAG_ACK_HEADER_LEN + ecu_response.len());
         payload.extend_from_slice(&tgt.to_be_bytes()); // server address
         payload.extend_from_slice(&src.to_be_bytes()); // client address
@@ -58,17 +58,17 @@ impl PayloadHandler<TcpPayloadType, TcpRequest> for DiagnosticsHandler {
         TcpPayloadType::DiagnosticMessage
     }
 
-    fn handle(&self, req: TcpRequest) -> Result<Response, Error> {
+    fn handle(&self, tcp_request: TcpRequest) -> Result<Response, Error> {
         // Payload layout: source_addr(2) + target_addr(2) + uds_data(N)
-        if req.payload().len() < DIAG_MSG_MIN_PAYLOAD_LEN {
+        if tcp_request.payload().len() < DIAG_MSG_MIN_PAYLOAD_LEN {
             return Err(Error::PayloadTooShort {
                 expected: DIAG_MSG_MIN_PAYLOAD_LEN,
-                actual: req.payload().len(),
+                actual: tcp_request.payload().len(),
             });
         }
-        let src = u16::from_be_bytes([req.payload()[0], req.payload()[1]]);
-        let tgt = u16::from_be_bytes([req.payload()[2], req.payload()[3]]);
-        self.forward(src, tgt, &req.payload()[4..])
+        let source_address = u16::from_be_bytes([tcp_request.payload()[0], tcp_request.payload()[1]]);
+        let target_address = u16::from_be_bytes([tcp_request.payload()[2], tcp_request.payload()[3]]);
+        self.forward(source_address, target_address, &tcp_request.payload()[4..])
     }
 }
 

@@ -34,8 +34,9 @@ impl From<u16> for LogicalAddress {
     }
 }
 
-/// Vehicle Identification Number (ISO 3779): 17 ASCII characters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+/// Vehicle Identification Number (ISO 3779): 17 ASCII bytes.
+/// In TOML, specify as an array of byte values (e.g., `vin = [48, 48, ...]`).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct Vin([u8; 17]);
 
 impl Vin {
@@ -51,7 +52,7 @@ impl Vin {
 
 /// Entity Identifier: 6 bytes, typically the MAC address of the DoIP node's
 /// network interface (ISO 13400-2 #7.6.2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct Eid([u8; 6]);
 
 impl Eid {

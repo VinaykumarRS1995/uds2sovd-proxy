@@ -20,7 +20,7 @@ use crate::doip::message::ConnectionId;
 /// Holds the connection's unique ID and a shared reference to the session
 /// counter. When dropped (session thread exits, error, or clean close), the
 /// counter is automatically decremented — no explicit cleanup required.
-pub struct ConnectionSlot {
+pub(in crate::server::tcp) struct ConnectionSlot {
     id: ConnectionId,
     counter: Arc<AtomicUsize>,
 }
@@ -31,7 +31,7 @@ impl ConnectionSlot {
     }
 
     /// The unique ID assigned to this connection.
-    pub fn id(&self) -> &ConnectionId {
+    pub(in crate::server::tcp) fn id(&self) -> &ConnectionId {
         &self.id
     }
 }

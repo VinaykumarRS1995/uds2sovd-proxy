@@ -34,12 +34,7 @@ async fn main() -> Result<(), AppError> {
     // TODO: Replace StubProxy with real UDS-to-SOVD proxy implementation.
     let (tcp_config, udp_config, ecu_config) = config.into_parts();
     let tcp_dispatcher = doip::tcp_dispatcher(tcp_config.logical_address(), Arc::new(StubProxy));
-    let udp_dispatcher = doip::udp_dispatcher(
-        udp_config.logical_address(),
-        ecu_config.vin(),
-        ecu_config.eid(),
-        ecu_config.gid(),
-    );
+    let udp_dispatcher = doip::udp_dispatcher(udp_config.logical_address(), &ecu_config);
 
     let tcp = Tcp::new(tcp_config, tcp_dispatcher);
     let udp = Udp::new(udp_config, udp_dispatcher);

@@ -13,11 +13,11 @@
 //! Per-connection session: owns a [`ConnectionSlot`], drives the I/O loop,
 //! and dispatches parsed frames to handlers.
 
-pub mod manager;
-pub mod slot;
+pub(super) mod manager;
+pub(super) mod slot;
 
-pub use manager::SessionManager;
-pub use slot::ConnectionSlot;
+pub(super) use manager::SessionManager;
+pub(super) use slot::ConnectionSlot;
 
 use std::sync::Arc;
 
@@ -32,13 +32,13 @@ use crate::server::tcp::framer::Framer;
 ///
 /// Owns the `ConnectionSlot` (RAII counter decrement on drop). When `run()` completes
 /// the slot is dropped, automatically decrementing the active session counter.
-pub struct Session {
+pub(super) struct Session {
     slot: ConnectionSlot,
 }
 
 impl Session {
     /// Create a session that owns the given connection slot.
-    pub fn new(slot: ConnectionSlot) -> Self {
+    pub(super) fn new(slot: ConnectionSlot) -> Self {
         Self { slot }
     }
 
@@ -97,6 +97,7 @@ impl Session {
                 }
                 Err(err) => {
                     tracing::error!(id = %id, error = %err, "read error");
+                    // TODO: propagate error to caller instead of silently disconnecting
                     break;
                 }
             }

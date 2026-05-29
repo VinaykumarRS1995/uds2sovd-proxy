@@ -1,5 +1,17 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ */
+
 @startuml Startup
-title DoIP Server - Startup Flow
+title 01-startup
 
 <style>
 sequenceDiagram {
@@ -10,43 +22,43 @@ sequenceDiagram {
 }
 </style>
 
-participant "Main" as Main
+participant "DoIP Server App" as DoipServerApp
 participant "Server" as Server
 participant "TCP Service" as Tcp
 participant "UDP Service" as Udp
 
 == Load Configuration ==
 
-Main -> Main: load configuration
+DoipServerApp -> DoipServerApp: load configuration
 |||
-note right of Main
+note right of DoipServerApp
   CLI config file or defaults
 end note
 
 == Initialize Services ==
 
-Main -> Tcp: create TCP service
+DoipServerApp -> Tcp: create TCP service
 |||
-Main -> Udp: create UDP service
+DoipServerApp -> Udp: create UDP service
 |||
-Main -> Server: create server
+DoipServerApp -> Server: create server
 
 == Start Runtime ==
 
-Main -> Server: start()
+DoipServerApp -> Server: start()
 |||
 
 Server -> Tcp: bind TCP listener
 alt TCP bind failure
   Tcp --> Server: startup error
-  Server --> Main: startup failed
+  Server --> DoipServerApp: startup failed
 end
 |||
 
 Server -> Udp: bind UDP socket
 alt UDP bind failure
   Udp --> Server: startup error
-  Server --> Main: startup failed
+  Server --> DoipServerApp: startup failed
 end
 
 == Running State ==

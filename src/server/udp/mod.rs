@@ -57,7 +57,7 @@ impl Transport for Udp {
                                 tracing::error!(error = %err, peer = %src_addr, "UDP send error");
                             }
                         }
-                        Err(Error::NoMatch) => {
+                        Err(Error::EIDNotMatched) | Err(Error::VinNotMatched) => {
                             tracing::debug!(peer = %src_addr, "no matching entity, not responding");
                         }
                         Err(err) => {
