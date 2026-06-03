@@ -1,18 +1,16 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 //! Handler for VehicleIdentificationRequestWithVIN (0x0003, ISO 13400-2 §7.6.1.2).
 
-use super::common::create_vi_response;
+use super::utils::create_vi_response;
 use crate::config::EcuConfig;
 use crate::doip::{
     PayloadHandler,
@@ -43,9 +41,10 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleByVinHandler 
     }
 
     fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
+        // ISO 13400-2 §7.6.1.2: VIN must be exactly 17 bytes
         if udp_request.payload().len() != VIN_LEN {
-            return Err(Error::PayloadTooShort {
-                expected: VIN_LEN,
+            return Err(Error::InvalidPayloadLength {
+                expected: VIN_LEN as u32,
                 actual: udp_request.payload().len(),
             });
         }
@@ -60,7 +59,7 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleByVinHandler 
 
 #[cfg(test)]
 mod tests {
-    use super::super::common::fixtures::*;
+    use super::super::utils::fixtures::*;
     use super::*;
 
     fn handler() -> IdentifyVehicleByVinHandler {
@@ -93,9 +92,23 @@ mod tests {
         );
         assert!(matches!(
             handler().handle(req),
-            Err(Error::PayloadTooShort {
+            Err(Error::InvalidPayloadLength {
                 expected: 17,
                 actual: 3
+            })
+        ));
+    }
+    #[test]
+    fn payload_too_long_returns_error() {
+        let req = UdpRequest::new(
+            UdpPayloadType::VehicleIdentificationRequestWithVin,
+            vec![0x00; 18], // 18 bytes — more than required 17
+        );
+        assert!(matches!(
+            handler().handle(req),
+            Err(Error::InvalidPayloadLength {
+                expected: 17,
+                actual: 18
             })
         ));
     }

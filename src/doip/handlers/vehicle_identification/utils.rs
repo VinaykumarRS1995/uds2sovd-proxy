@@ -1,14 +1,12 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 //! Shared response builder for Vehicle Identification handlers (ISO 13400-2 §7.6.2).
 
@@ -24,7 +22,7 @@ const VI_RESPONSE_LEN: usize = 32;
 
 /// Builds the 32-byte Vehicle Identification Response / Announcement payload.
 ///
-/// Layout:
+/// payload layout:
 /// ```text
 /// [0..17]  VIN
 /// [17..19] logical address (big-endian)
@@ -46,6 +44,8 @@ pub(super) fn create_vi_response(
 }
 
 #[cfg(test)]
+// pub(super) so sibling handler test modules can import these fixtures,
+// but they are not exposed outside the vehicle_identification module.
 pub(super) mod fixtures {
     use crate::config::EcuConfig;
     use crate::doip::types::{Eid, Gid, LogicalAddress, Vin};
@@ -59,6 +59,7 @@ pub(super) mod fixtures {
     /// Group ID (6 bytes, all-zero = no grouping per ISO 13400-2)
     pub const TEST_GID: Gid = Gid::new([0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
+    /// ECU logical address — intentionally outside the standard ECU range    
     /// ECU logical address (ISO 13400-2 range 0x0001–0x0DFF)
     pub const TEST_ADDR: LogicalAddress = LogicalAddress::new(0x0E01);
 

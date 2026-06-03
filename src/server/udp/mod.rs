@@ -1,14 +1,12 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 //! UDP transport — recv loop for DoIP discovery and entity status messages.
 
@@ -57,14 +55,14 @@ impl Transport for Udp {
                                 tracing::error!(error = %err, peer = %src_addr, "UDP send error");
                             }
                         }
+                        //ISO 13400-2 §7.6.1 : non-matching EID/VIN -> no response
                         Err(Error::EIDNotMatched) | Err(Error::VinNotMatched) => {
                             tracing::debug!(peer = %src_addr, "no matching entity, not responding");
                         }
                         Err(err) => {
                             tracing::warn!(error = %err, peer = %src_addr, "UDP dispatch error");
-                            let nack = crate::doip::message::Response::doip_header_nack(
-                                crate::doip::message::nack_code(&err),
-                            );
+                            let nack =
+                                crate::doip::message::Response::doip_header_nack(err.nack_code());
                             let _ = socket.send_to(&nack.to_bytes(), src_addr).await;
                         }
                     }

@@ -1,14 +1,12 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 //! TCP transport — accept loop, session management, and byte-stream framing.
 
@@ -28,6 +26,14 @@ use crate::doip::message::{DoipNackCode, Response};
 use session::{Session, SessionManager};
 
 /// TCP transport: binds a listener and spawns one session per accepted connection.
+///
+/// # Current responsibility (mixed for simplicity):
+/// - Transport: bind, accept, spawn sessions
+/// - Protocol: session limit enforcement, NACK on rejection
+///
+/// # Future improvement: Separation of concerns
+/// Extract protocol logic into a separate handler layer if we support
+/// multiple protocols over TCP. .
 pub struct Tcp {
     config: TcpConfig,
     manager: SessionManager,
@@ -63,6 +69,7 @@ impl Transport for Tcp {
                             session.run(stream, dispatcher, buf_size).await;
                         });
                     }
+                    //NACK is sent per ISO 13400-2 §7.6.1 if the server is at max capacity. The connection is then dropped without a response.
                     None => {
                         tracing::warn!(peer = %peer_addr, "connection rejected: max sessions reached");
                         let nack = Response::doip_header_nack(DoipNackCode::OutOfMemory);

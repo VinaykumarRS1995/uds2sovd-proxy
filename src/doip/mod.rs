@@ -1,19 +1,27 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
+
+//! DoIP (Diagnostics over IP) protocol implementation per ISO 13400-2.
+//!
+//! Provides:
+//! - Message types and parsing for TCP and UDP transports
+//! - Handler trait and dispatcher for routing messages by payload type
+//! - Handlers for vehicle identification, routing activation, alive check,
+//!   entity status, and diagnostic messages
+//! - Protocol constants and type-safe domain types (VIN, EID, LogicalAddress)
 
 pub mod constants;
 pub mod dispatch;
 pub mod error;
 pub mod handlers;
+pub mod header;
 pub mod message;
 pub mod types;
 

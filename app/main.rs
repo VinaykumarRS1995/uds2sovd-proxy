@@ -1,19 +1,17 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 use std::sync::Arc;
 use uds2sovd::{config, doip, error, proxy, server};
 
-use config::{ConfigProvider, InMemoryConfigProvider, ServerConfig, TomlConfigProvider};
+use config::{ConfigProvider, DefaultConfigProvider, ServerConfig, TomlConfigProvider};
 use error::AppError;
 use proxy::stub::StubProxy;
 use server::Server;
@@ -25,8 +23,9 @@ async fn main() -> Result<(), AppError> {
     tracing_subscriber::fmt::init();
 
     let config = match std::env::args().nth(1) {
-        Some(path) => TomlConfigProvider::new(path.into()).load(),
-        None => InMemoryConfigProvider::new(ServerConfig::default()).load(),
+        //TODO : Add CLI arg parsing with clap or similar for better UX and error handling.
+        Some(path) => TomlConfigProvider::new(path.into()).load()?,
+        None => DefaultConfigProvider::new(ServerConfig::default()).load()?,
     };
 
     tracing::info!("Starting DoIP server");
@@ -41,6 +40,7 @@ async fn main() -> Result<(), AppError> {
 
     let server = Server::new(tcp, udp);
 
+    // As of now shutdown is triggered by Ctrl+C, but this can be extended to support other signals or programmatic shutdown in the future.
     tokio::select! {
         result = server.start() => { result?; }
         _ = tokio::signal::ctrl_c() => {

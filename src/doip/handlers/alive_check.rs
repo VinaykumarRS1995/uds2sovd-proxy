@@ -1,14 +1,12 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 use crate::doip::{
     PayloadHandler,
@@ -18,7 +16,9 @@ use crate::doip::{
 };
 
 /// Handles AliveCheckRequest (0x0007, ISO 13400-2 §9.7).
-/// Responds with this entity's logical address to confirm the connection is live.
+///
+/// The DoIP client sends this periodically to verify the TCP connection
+/// is still active. Response carries this entity's logical address.
 pub struct AliveCheckHandler {
     logical_address: LogicalAddress,
 }
@@ -28,8 +28,9 @@ impl AliveCheckHandler {
         Self { logical_address }
     }
 
-    /// Protocol logic (ISO 13400-2 #9.7).
-    /// AliveCheckResponse payload = server logical address (2 bytes).
+    /// Build AliveCheckResponse with this entity's logical address.
+    ///
+    /// Response payload: 2 bytes (logical address in big-endian) per ISO 13400-2 §9.7.
     fn respond(&self) -> Response {
         let mut payload = Vec::with_capacity(2);
         payload.extend_from_slice(&self.logical_address.to_be_bytes());
@@ -42,9 +43,10 @@ impl PayloadHandler<TcpPayloadType, TcpRequest> for AliveCheckHandler {
         TcpPayloadType::AliveCheckRequest
     }
     fn handle(&self, tcp_request: TcpRequest) -> Result<Response, Error> {
+        // ISO 13400-2 §9.7: AliveCheckRequest must have empty payload (0 bytes)
         if !tcp_request.payload().is_empty() {
-            return Err(Error::InvalidPayloadLength {
-                declared: tcp_request.payload().len() as u32,
+            return Err(Error::UnexpectedPayload {
+                expected: 0,
                 actual: tcp_request.payload().len(),
             });
         }
@@ -84,8 +86,8 @@ mod tests {
         let resp = handler.handle(req);
         assert!(matches!(
             resp,
-            Err(Error::InvalidPayloadLength {
-                declared: 1,
+            Err(Error::UnexpectedPayload {
+                expected: 0,
                 actual: 1
             })
         ));

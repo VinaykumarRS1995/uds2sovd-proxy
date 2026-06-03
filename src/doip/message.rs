@@ -1,17 +1,14 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 use crate::doip::constants::{INVERSE_VERSION, PROTOCOL_VERSION};
-use crate::doip::error::Error;
 
 /// Generic DoIP header NACK codes (ISO 13400-2 §9.4, Table 18).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -35,26 +32,12 @@ impl From<DoipNackCode> for u8 {
     }
 }
 
-/// Maps a DoIP error to the appropriate generic header NACK code (ISO 13400-2 Table 4).
-pub fn nack_code(err: &Error) -> DoipNackCode {
-    match err {
-        Error::InvalidHeaderVersion(_) | Error::InvalidInverseVersion(_) => {
-            DoipNackCode::IncorrectPattern
-        }
-        Error::UnknownPayloadType(_) => DoipNackCode::UnknownPayloadType,
-        Error::PayloadTooLarge(_) => DoipNackCode::MessageTooLarge,
-        Error::InvalidPayloadLength { .. } | Error::PayloadTooShort { .. } => {
-            DoipNackCode::InvalidPayloadLength
-        }
-        Error::Proxy(_) => DoipNackCode::IncorrectPattern,
-        Error::EIDNotMatched | Error::VinNotMatched => DoipNackCode::IncorrectPattern,
-    }
-}
-
 // Connection identity
 
-/// Unique identifier for a TCP session, assigned at accept time.
-/// Distinct from the DoIP logical address which is assigned at routing activation.
+/// Unique identifier for a TCP session, assigned at connection accept time.
+///
+/// Distinct from DoIP logical address, which is negotiated during routing
+/// activation and used for message routing within the diagnostic protocol.
 #[derive(Debug)]
 pub struct ConnectionId(uuid::Uuid);
 
@@ -335,5 +318,12 @@ mod tests {
         assert_eq!(tcp, 0x8001);
         let udp: u16 = UdpPayloadType::DoipEntityStatusRequest.into();
         assert_eq!(udp, 0x4001);
+    }
+    #[test]
+    fn response_to_bytes_empty_payload() {
+        let resp = Response::new(0x0006, vec![]);
+        let bytes = resp.to_bytes();
+        assert_eq!(bytes.len(), 8); // header only, no payload
+        assert_eq!(&bytes[4..8], &0u32.to_be_bytes());
     }
 }

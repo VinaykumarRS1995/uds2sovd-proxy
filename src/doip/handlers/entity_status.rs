@@ -1,14 +1,12 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 use crate::doip::{
     PayloadHandler,
@@ -19,11 +17,23 @@ use crate::doip::{
 
 // DoipEntityStatusRequest (0x4001)
 
-/// Handles DoipEntityStatusRequest (ISO 13400-2 §7.6.3).
-/// Reports node type, max TCP sessions, current sessions, and max data size.
+/// Handles DoipEntityStatusRequest (0x4001, ISO 13400-2 §7.6.3).
+///
+/// Reports server capacity to diagnostic clients: node type, connection limits,
+/// and maximum diagnostic message size.
 pub struct EntityStatusHandler {
+    /// Maximum concurrent TCP connections supported by this server.
+    ///
+    /// This is a configuration value, not a compile-time constant. Different
+    /// deployments have different capacity (e.g., embedded ECU: 2 connections,
+    /// desktop proxy: 50 connections).
+    ///
+    /// Per ISO 13400-2 §7.6.3, this value must be sent in every response
+    /// to inform diagnostic clients of server capacity.
     max_connections: u8,
-    // TODO: Derive max_data_size from config instead of hardcoding at registration.
+
+    /// Maximum DoIP message size accepted by this server.
+    // TODO: Derive from config instead of hardcoding at registration.
     max_data_size: u32,
 }
 
@@ -42,14 +52,14 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for EntityStatusHandler {
     }
 
     /// Response payload (7 bytes):
-    /// [0]     node type (0x01 = DoIP node)
-    /// [1]     max concurrent TCP sockets
-    /// [2]     currently open TCP sockets (0 — not tracked at this level)
-    /// [3..7]  max data size (u32 big-endian)
+    /// \[0\]     node type (0x01 = DoIP node)
+    /// \[1\]     max concurrent TCP sockets
+    /// \[2\]     currently open TCP sockets (0 — not tracked at this level)
+    /// \[3..7\]  max data size (u32 big-endian)
     fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
         if !udp_request.payload().is_empty() {
-            return Err(Error::InvalidPayloadLength {
-                declared: udp_request.payload().len() as u32,
+            return Err(Error::UnexpectedPayload {
+                expected: 0,
                 actual: udp_request.payload().len(),
             });
         }
