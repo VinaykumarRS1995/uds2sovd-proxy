@@ -1,14 +1,12 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -32,8 +30,14 @@ pub trait PayloadHandler<PayloadType, Request>: Send + Sync {
 
 /// Generic registry and router for payload-type handlers.
 ///
-/// Completely protocol-agnostic. The concrete transports bind it to specific
-/// payload-type enums via the [`TcpDispatcher`] and [`UdpDispatcher`] aliases.
+/// Completely protocol-agnostic. The concrete transport type aliases bind it
+/// to specific payload-type enums via [`TcpDispatcher`] and [`UdpDispatcher`].
+///
+/// # Type safety
+///
+/// The generic parameters enforce transport segregation at compile time.
+/// A handler typed for TCP cannot be registered on a UDP dispatcher and vice
+/// versa, preventing an entire class of bugs.
 pub struct Dispatcher<PayloadType, Request>
 where
     PayloadType: Eq + Hash,
@@ -47,6 +51,9 @@ where
     Request: HasPayloadType<PayloadType>,
 {
     /// Create an empty dispatcher with no handlers registered.
+    ///
+    /// Note: Manual implementation kept for now to avoid proc-macro dependencies.
+    /// Future improvement: Consider `#[derive(new)]` if similar patterns emerge across codebase.
     pub fn new() -> Self {
         Self {
             handlers: HashMap::new(),
@@ -54,6 +61,9 @@ where
     }
 
     /// Register a handler for its declared payload type.
+    ///
+    /// TODO: Consider adding  registration API if handler count grows:
+    /// `pub fn register_all(&mut self, handlers: Vec<Box<dyn PayloadHandler<...>>>)`
     pub fn register(&mut self, handler: impl PayloadHandler<PayloadType, Request> + 'static) {
         let payload_type = handler.payload_type();
         self.handlers.insert(payload_type, Box::new(handler));

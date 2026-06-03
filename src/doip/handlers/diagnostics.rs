@@ -1,14 +1,12 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 use std::sync::Arc;
 
@@ -34,6 +32,13 @@ impl DiagnosticsHandler {
     /// Protocol logic (ISO 13400-2 #9.11): forward UDS bytes to the SOVD proxy,
     /// wrap the response in a DiagnosticMessagePositiveAck.
     fn forward(&self, src: u16, tgt: u16, uds: &[u8]) -> Result<Response, Error> {
+        // TODO: Add NRC 0x78 (responsePending) support per ISO 14229-1.
+        // When the real SOVD backend is wired:
+        // 1. Start a P2*Server timer (default 50ms) before calling proxy.process()
+        // 2. If the timer expires before proxy responds, send NRC 0x78 to the tester
+        // 3. Restart with extended P2*Server_max timer (default 5000ms)
+        // 4. Repeat until the proxy returns or max retries exceeded
+        // This requires proxy.process() to be async (see proxy/mod.rs TODO).
         let ecu_response = self.proxy.process(uds)?;
 
         // Payload layout:
@@ -66,8 +71,10 @@ impl PayloadHandler<TcpPayloadType, TcpRequest> for DiagnosticsHandler {
                 actual: tcp_request.payload().len(),
             });
         }
-        let source_address = u16::from_be_bytes([tcp_request.payload()[0], tcp_request.payload()[1]]);
-        let target_address = u16::from_be_bytes([tcp_request.payload()[2], tcp_request.payload()[3]]);
+        let source_address =
+            u16::from_be_bytes([tcp_request.payload()[0], tcp_request.payload()[1]]);
+        let target_address =
+            u16::from_be_bytes([tcp_request.payload()[2], tcp_request.payload()[3]]);
         self.forward(source_address, target_address, &tcp_request.payload()[4..])
     }
 }

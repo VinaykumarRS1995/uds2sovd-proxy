@@ -1,20 +1,18 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
-
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 use std::sync::Arc;
 
 use crate::doip::UdpDispatcher;
-use crate::doip::constants::{HEADER_LEN, INVERSE_VERSION, PROTOCOL_VERSION};
+use crate::doip::constants::HEADER_LEN;
 use crate::doip::error::Error;
+use crate::doip::header::DoipHeader;
 use crate::doip::message::{Response, UdpPayloadType, UdpRequest};
 
 /// Parses and dispatches a single UDP DoIP datagram.
@@ -33,32 +31,29 @@ impl Handler {
     ///
     /// Returns the response to send back, or an error if the datagram is malformed
     /// or the payload type is unrecognised.
+    ///
+    /// Unlike TCP , UDP is datagram-based
+    /// each call to handle() processes exactly one complete message.
     pub(crate) fn handle(&self, data: &[u8]) -> Result<Response, Error> {
         if data.len() < HEADER_LEN {
             return Err(Error::InvalidPayloadLength {
-                declared: 0,
+                expected: 0,
                 actual: data.len(),
             });
         }
-        if data[0] != PROTOCOL_VERSION {
-            return Err(Error::InvalidHeaderVersion(data[0]));
-        }
-        if data[1] != INVERSE_VERSION {
-            return Err(Error::InvalidInverseVersion(data[1]));
-        }
 
-        let payload_type_raw = u16::from_be_bytes([data[2], data[3]]);
-        let payload_len = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+        let header = DoipHeader::parse(&data[..HEADER_LEN])?;
+        let payload_len = header.payload_len;
 
         if data.len() != HEADER_LEN + payload_len {
             return Err(Error::InvalidPayloadLength {
-                declared: payload_len as u32,
+                expected: payload_len as u32,
                 actual: data.len().saturating_sub(HEADER_LEN),
             });
         }
 
         let payload_type =
-            UdpPayloadType::try_from(payload_type_raw).map_err(Error::UnknownPayloadType)?;
+            UdpPayloadType::try_from(header.payload_type_raw).map_err(Error::UnknownPayloadType)?;
 
         let udp_request = UdpRequest::new(
             payload_type,
@@ -137,7 +132,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(Error::InvalidPayloadLength {
-                declared: 0,
+                expected: 0,
                 actual: 2
             })
         ));

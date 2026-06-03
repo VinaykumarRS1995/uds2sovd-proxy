@@ -1,18 +1,13 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
-//! Handler for VehicleIdentificationRequestWithEID (0x0002, ISO 13400-2 §7.6.1.1).
-
-use super::common::create_vi_response;
 use crate::config::EcuConfig;
 use crate::doip::{
     PayloadHandler,
@@ -21,6 +16,8 @@ use crate::doip::{
     message::{Response, UdpPayloadType, UdpRequest},
     types::{Eid, LogicalAddress},
 };
+
+use super::utils::create_vi_response;
 
 /// Handles 0x0002 — responds only if the requested EID matches.
 pub struct IdentifyVehicleByEidHandler {
@@ -43,9 +40,10 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleByEidHandler 
     }
 
     fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
+        // ISO 13400-2 §7.6.1.3: EID must be exactly 6 bytes
         if udp_request.payload().len() != EID_LEN {
-            return Err(Error::PayloadTooShort {
-                expected: EID_LEN,
+            return Err(Error::InvalidPayloadLength {
+                expected: EID_LEN as u32,
                 actual: udp_request.payload().len(),
             });
         }
@@ -66,7 +64,7 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleByEidHandler 
 
 #[cfg(test)]
 mod tests {
-    use super::super::common::fixtures::*;
+    use super::super::utils::fixtures::*;
     use super::*;
 
     fn handler() -> IdentifyVehicleByEidHandler {
@@ -99,9 +97,23 @@ mod tests {
         );
         assert!(matches!(
             handler().handle(req),
-            Err(Error::PayloadTooShort {
+            Err(Error::InvalidPayloadLength {
                 expected: 6,
                 actual: 3
+            })
+        ));
+    }
+    #[test]
+    fn payload_too_long_returns_error() {
+        let req = UdpRequest::new(
+            UdpPayloadType::VehicleIdentificationRequestWithEid,
+            vec![0x00; 7], // 7 bytes — more than required 6
+        );
+        assert!(matches!(
+            handler().handle(req),
+            Err(Error::InvalidPayloadLength {
+                expected: 6,
+                actual: 7
             })
         ));
     }

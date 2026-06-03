@@ -1,18 +1,16 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 //! Handler for VehicleIdentificationRequest (0x0001, ISO 13400-2 §7.6.1).
 
-use super::common::create_vi_response;
+use super::utils::create_vi_response;
 use crate::config::EcuConfig;
 use crate::doip::{
     PayloadHandler,
@@ -41,10 +39,12 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleHandler {
         UdpPayloadType::VehicleIdentificationRequest
     }
 
+    /// ISO 13400-2 requires an empty payload for 0x0001.
+    /// Any non-empty payload is rejected as malformed.    
     fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
         if !udp_request.payload().is_empty() {
-            return Err(Error::InvalidPayloadLength {
-                declared: udp_request.payload().len() as u32,
+            return Err(Error::UnexpectedPayload {
+                expected: 0,
                 actual: udp_request.payload().len(),
             });
         }
@@ -54,7 +54,7 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleHandler {
 
 #[cfg(test)]
 mod tests {
-    use super::super::common::fixtures::*;
+    use super::super::utils::fixtures::*;
     use super::*;
 
     fn handler() -> IdentifyVehicleHandler {
@@ -82,6 +82,12 @@ mod tests {
             UdpPayloadType::VehicleIdentificationRequest,
             vec![0x01],
         ));
-        assert!(matches!(result, Err(Error::InvalidPayloadLength { .. })));
+        assert!(matches!(
+            result,
+            Err(Error::UnexpectedPayload {
+                expected: 0,
+                actual: 1
+            })
+        ));
     }
 }

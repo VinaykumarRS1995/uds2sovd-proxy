@@ -1,14 +1,12 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 use std::net::SocketAddr;
 
@@ -18,7 +16,20 @@ use super::defaults;
 use crate::doip::types::{Eid, Gid, LogicalAddress, Vin};
 
 /// Top-level server configuration, split into TCP, UDP, and ECU sections.
+///
+///Private fields
+///
+/// Fields are private and accessed via `into_parts()` to:
+/// - Force explicit destructuring of config sections
+/// - Prevent accidental mixing of TCP/UDP/ECU settings
+/// - Make it obvious in calling code which config section is being used
+///
+/// # Serde behavior
+///
+/// `#[serde(default)]` allows partial TOML files — missing sections use Default.
+/// Users only specify what they want to change from defaults.
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
 pub struct ServerConfig {
     tcp: TcpConfig,
     udp: UdpConfig,
@@ -33,7 +44,10 @@ impl ServerConfig {
 }
 
 /// TCP transport settings: listen address, connection limits, buffer size.
+///
+/// Using #[serde(default)] allows omitting fields in TOML — they'll use Default values.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct TcpConfig {
     address: SocketAddr,
     max_connections: usize,
@@ -64,7 +78,10 @@ impl TcpConfig {
 }
 
 /// UDP transport settings: listen address and logical address.
+///
+/// Using #[serde(default)] allows omitting fields in TOML — they'll use Default values.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct UdpConfig {
     address: SocketAddr,
     logical_address: LogicalAddress,
@@ -102,8 +119,10 @@ impl Default for UdpConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
 /// ECU identity settings: VIN, EID, and GID used in vehicle identification responses.
+///
+/// Note: No #[serde(default)] here since VIN/EID are required configuration parameters.
+#[derive(Debug, Clone, Deserialize)]
 pub struct EcuConfig {
     vin: Vin,
     eid: Eid,

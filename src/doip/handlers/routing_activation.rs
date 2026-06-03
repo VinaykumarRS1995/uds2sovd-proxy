@@ -1,3 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
+
 use crate::doip::{
     PayloadHandler,
     constants::{ROUTING_ACTIVATION_CODE_SUCCESS, ROUTING_ACTIVATION_REQUEST_MIN_LEN},
@@ -51,7 +61,8 @@ impl PayloadHandler<TcpPayloadType, TcpRequest> for RoutingActivationHandler {
                 actual: tcp_request.payload().len(),
             });
         }
-        let client_address = u16::from_be_bytes([tcp_request.payload()[0], tcp_request.payload()[1]]);
+        let client_address =
+            u16::from_be_bytes([tcp_request.payload()[0], tcp_request.payload()[1]]);
         let activation_type = tcp_request.payload()[2];
         Ok(self.activate(client_address, activation_type))
     }

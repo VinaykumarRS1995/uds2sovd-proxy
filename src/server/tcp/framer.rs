@@ -1,17 +1,16 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
-use crate::doip::constants::{HEADER_LEN, INVERSE_VERSION, PROTOCOL_VERSION};
+use crate::doip::constants::{HEADER_LEN, MAX_DOIP_PAYLOAD_LEN};
 use crate::doip::error::Error;
+use crate::doip::header::DoipHeader;
 use crate::doip::message::TcpPayloadType;
 
 /// A fully validated DoIP frame parsed from the TCP byte stream.
@@ -28,23 +27,48 @@ impl Frame {
     }
 }
 
-/// Stateful byte-stream framer.
+/// Stateful byte-stream framer for DoIP over TCP.
 ///
-/// Accumulates raw bytes across multiple reads and emits complete, validated
-/// DoIP frames.
+/// # Framing strategy
+///
+/// DoIP has no start-of-frame markers or escape sequences. Framing relies
+/// entirely on the length field in the 8-byte header. Once a frame is parsed,
+/// the framer commits to that interpretation — there's no way to resynchronize
+/// mid-stream if corruption occurs.
+///
+/// # Error handling
+///
+/// - **Protocol errors** (`InvalidHeaderVersion`, `InvalidInverseVersion`):
+///   Parsing stops immediately. The connection must be closed per ISO 13400-2 §7.2.
+/// - **Oversized frames**: Entire frame is skipped when complete. Partial frames
+///   wait for more data to avoid misinterpreting payload as header.
+/// - **Unknown payload types**: Frame is consumed and error returned, but parsing
+///   continues for subsequent frames.
 pub struct Framer {
     buffer: Vec<u8>,
 }
 
 impl Framer {
     /// Create a new framer with an empty internal buffer.
+    ///  #[derive(new)] could be used here  , now to avoid the new dependency on the `derive-new` crate for a simple constructor,
+    ///  we implement it manually. Future improvement: If similar patterns emerge across the codebase, consider using #[derive(new)] for consistency and reduced boilerplate.
     pub fn new() -> Self {
         Self { buffer: Vec::new() }
     }
 
     /// Feed raw bytes in; receive zero or more complete frames (or per-frame errors) out.
     ///
-    /// A framing error on one frame does NOT discard subsequent buffered data.
+    /// # Framing guarantees
+    ///
+    /// - A framing error on one frame does NOT discard subsequent buffered data
+    ///   (exception: protocol version errors trigger immediate stop).
+    /// - Partial frames remain in buffer until complete.
+    /// - Oversized frames are only skipped after receiving all declared bytes.
+    ///
+    /// # Protocol version errors
+    ///
+    /// If `InvalidHeaderVersion` or `InvalidInverseVersion` is returned, the caller
+    /// MUST close the TCP connection. DoIP provides no recovery mechanism for these errors.
     pub fn feed(&mut self, bytes: &[u8]) -> Vec<Result<Frame, Error>> {
         self.buffer.extend_from_slice(bytes);
         let mut frames = Vec::new();
@@ -54,33 +78,37 @@ impl Framer {
                 break; // not enough bytes for a header yet
             }
 
-            // Validate protocol version byte
-            if self.buffer[0] != PROTOCOL_VERSION {
-                frames.push(Err(Error::InvalidHeaderVersion(self.buffer[0])));
-                self.buffer.drain(..1); // discard one byte and attempt re-sync
-                continue;
-            }
+            // Parse and validate the 8-byte DoIP generic header
+            let header = match DoipHeader::parse(&self.buffer[..HEADER_LEN]) {
+                Ok(h) => h,
+                Err(e) => {
+                    // Protocol version errors — no recovery possible mid-stream.
+                    // Return error and let connection handler close per ISO 13400-2 §7.2
+                    frames.push(Err(e));
+                    break;
+                }
+            };
 
-            // Validate inverse version byte
-            if self.buffer[1] != INVERSE_VERSION {
-                frames.push(Err(Error::InvalidInverseVersion(self.buffer[1])));
-                self.buffer.drain(..HEADER_LEN); // discard the bad header
-                continue;
-            }
+            let payload_type_raw = header.payload_type_raw;
+            let payload_len = header.payload_len;
 
-            let payload_type_raw = u16::from_be_bytes([self.buffer[2], self.buffer[3]]);
-            let payload_len = u32::from_be_bytes([
-                self.buffer[4],
-                self.buffer[5],
-                self.buffer[6],
-                self.buffer[7],
-            ]) as usize;
             // ISO 13400-2: max DoIP payload size is 64KB for standard diagnostics.
-            use crate::doip::constants::MAX_DOIP_PAYLOAD_LEN;
 
             if payload_len > MAX_DOIP_PAYLOAD_LEN {
                 frames.push(Err(Error::PayloadTooLarge(payload_len)));
-                self.buffer.drain(..HEADER_LEN); // Discard the header, can't sync payload we don't have
+                // Corner case: Must drain ENTIRE frame (header + payload), not just header.
+                // Draining only header would cause payload bytes to be misinterpreted as
+                // the next header, breaking frame synchronization.
+                //
+                // Additional edge case: If payload hasn't fully arrived yet, we must wait
+                // rather than drain partial data, otherwise we'd skip into the middle of
+                // the oversized payload and lose sync.
+                let total_len = HEADER_LEN + payload_len;
+                if self.buffer.len() >= total_len {
+                    self.buffer.drain(..total_len);
+                } else {
+                    break; // Wait for complete frame before skipping
+                }
                 continue;
             }
 
@@ -111,6 +139,7 @@ impl Framer {
 }
 
 impl Default for Framer {
+    /// Note: `#[derive(new)]` can be considered in future if similar patterns grow across the codebase.    
     fn default() -> Self {
         Self::new()
     }

@@ -1,7 +1,6 @@
-
 <!--
 SPDX-License-Identifier: Apache-2.0
-SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
 
 See the NOTICE file(s) distributed with this work for additional
 information regarding copyright ownership.
@@ -11,7 +10,7 @@ terms of the Apache License Version 2.0 which is available at
 https://www.apache.org/licenses/LICENSE-2.0
 -->
 
-# 🔌 UDS-to-SOVD Proxy 
+#  UDS-to-SOVD Proxy 
 
 This repository contains the UDS-to-SOVD Proxy of the [Eclipse OpenSOVD](https://github.com/eclipse-opensovd) project.
 
@@ -46,6 +45,19 @@ The proxy consists of a **DoIP Server** (handles the DoIP wire protocol over TCP
 
 **Discovery** happens over UDP — testers broadcast vehicle identification requests and the server responds with its VIN (Vehicle Identification Number), EID (Entity Identifier), and logical address. **Diagnostics** happen over TCP — after a routing activation handshake, the tester sends UDS requests which the server forwards to the UDS2SOVD layer.
 
+**Current state:** The SOVD proxy is a stub (returns NRC 0x11 — serviceNotSupported).
+The DoIP protocol layer is fully functional for the supported message types below.
+
+## What It Does
+
+- Accepts **TCP connections** on port 13400 for diagnostic sessions
+- Accepts **UDP datagrams** on port 13400 for vehicle discovery
+- Parses and validates DoIP headers (ISO 13400-2 §7.3)
+- Routes messages to type-safe handlers via a generic dispatcher
+- Forwards UDS bytes to the `SovdProxy` trait implementation
+- Manages concurrent TCP sessions with RAII-based slot tracking
+- Supports TOML-based configuration or sensible defaults
+
 ### Supported Messages
 
 | Payload Type | Name | Transport | Behavior |
@@ -57,6 +69,33 @@ The proxy consists of a **DoIP Server** (handles the DoIP wire protocol over TCP
 | 0x0005 | RoutingActivationRequest | TCP | Accepts handshake |
 | 0x0007 | AliveCheckRequest | TCP | Confirms connection is live |
 | 0x8001 | DiagnosticMessage | TCP | Forwards UDS payload, returns ECU response |
+
+## Limitations
+
+> **Important:** This is an early-stage implementation. The following are known gaps:
+
+| Limitation | Impact |
+|---|---|
+| SOVD proxy is a stub | Returns NRC 0x11 for all UDS requests |
+| No session lifecycle state machine | Diagnostics accepted without routing activation |
+| No NRC 0x78 response-pending | Slow backends will cause tester timeouts |
+| No TLS / DoIP security | ISO 13400-3 not implemented |
+| No vehicle announcement broadcasting | Server responds to queries only |
+| Single logical address | No multi-ECU routing |
+| No config validation | Invalid values accepted silently |
+
+## Future Work
+
+- Real SOVD backend integration (async HTTP proxy)
+- DoIP session lifecycle state machine (ISO 13400-2 §9.3)
+- UDS NRC 0x78 response-pending for slow backends
+- Configuration validation at startup
+- TLS support (ISO 13400-3)
+- Structured logging with session correlation
+- Multi-ECU routing support
+- Vehicle announcement broadcasting (periodic + on-connect)
+- CLI argument parsing (e.g., clap)
+- Integration test harness with simulated DoIP client
 
 ### Usage
 
@@ -137,6 +176,18 @@ Open one terminal and start the proxy. Then open a second terminal and run the E
 cargo run -p doip-server
 cargo run -p doip-client
 ```
+
+Limitations
+Important: This is an early-stage implementation. The following are known gaps:
+
+Limitation	Impact
+SOVD proxy is a stub	Returns NRC 0x11 for all UDS requests
+No session lifecycle state machine	Diagnostics accepted without routing activation
+No NRC 0x78 response-pending	Slow backends will cause tester timeouts
+No TLS / DoIP security	ISO 13400-3 not implemented
+No vehicle announcement broadcasting	Server responds to queries only
+Single logical address	No multi-ECU routing
+No config validation	Invalid values accepted silently
 
 ## License
 

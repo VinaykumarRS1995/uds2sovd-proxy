@@ -1,14 +1,12 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -16,11 +14,20 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use super::slot::ConnectionSlot;
 use crate::doip::message::ConnectionId;
 
-/// Tracks the number of active sessions and enforces the maximum connection limit.
+/// Tracks active TCP sessions and enforces configured connection limit.
 ///
-/// Uses an atomic counter shared with `ConnectionSlot` — when a slot is dropped
-/// (session ends for any reason), the counter decrements automatically. No polling,
-/// no background task, no explicit remove() call needed.
+/// # Architecture
+///
+/// Uses atomic counter shared with `ConnectionSlot` via `Arc`. When a slot
+/// is dropped (session ends for any reason), the counter auto-decrements.
+/// No polling, no background tasks, no explicit `remove()` calls needed.
+///
+/// # Design choice: Arc-shared counter
+///
+/// `ConnectionSlot` holds `Arc<AtomicUsize>` (shared ownership of the counter)
+/// rather than `Arc<SessionManager>` to keep the slot lightweight.
+/// The slot only needs the counter to decrement on drop — it doesn't
+/// need access to `max` or any other manager state.
 pub(in crate::server::tcp) struct SessionManager {
     max: usize,
     active: Arc<AtomicUsize>,
@@ -41,16 +48,22 @@ impl SessionManager {
     /// when dropped.
     pub(in crate::server::tcp) fn try_acquire(&self) -> Option<ConnectionSlot> {
         self.active
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+            //  .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
                 if current < self.max {
                     Some(current + 1)
                 } else {
                     None
                 }
             })
-            .map(|_| {
+            .map(|previous| {
                 let id = ConnectionId::new();
-                tracing::debug!(id = %id, active = self.active_count() ,"session slot acquired");
+                let new_count = previous + 1;
+                // Use the actual incremented value to avoid race condition in logging
+                tracing::debug!(id = %id, active = new_count, "session slot acquired");
+                // Improvement: Consider having ConnectionSlot hold Arc<SessionManager> with a
+                // release_slot() method instead of directly sharing the atomic counter,
+                // if session management grows more complex in future iterations
                 ConnectionSlot::new(id, Arc::clone(&self.active))
             })
             .map_err(|_| {
@@ -58,16 +71,18 @@ impl SessionManager {
             })
             .ok()
     }
-
-    /// Number of sessions currently active.
-    pub(in crate::server::tcp) fn active_count(&self) -> usize {
-        self.active.load(Ordering::SeqCst)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl SessionManager {
+        /// Number of sessions currently active (test-only helper).
+        fn active_count(&self) -> usize {
+            self.active.load(Ordering::SeqCst)
+        }
+    }
 
     #[test]
     fn acquire_increments_active_count() {

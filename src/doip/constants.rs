@@ -1,14 +1,20 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- * SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
- *
- * See the NOTICE file(s) distributed with this work for additional
- * information regarding copyright ownership.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Apache License Version 2.0 which is available at
- * https://www.apache.org/licenses/LICENSE-2.0
- */
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
+
+//! DoIP protocol constants per ISO 13400-2.
+//!
+//! Organized by protocol section:
+//! - Header constants (§7.3)
+//! - Response codes (§9.x)
+//! - Field lengths
+//! - Message size limits
 
 /// DoIP protocol version byte (byte 0 of the generic header), ISO 13400-2 #7.3.
 pub const PROTOCOL_VERSION: u8 = 0xFD;
