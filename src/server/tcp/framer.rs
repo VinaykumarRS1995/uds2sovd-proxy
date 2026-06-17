@@ -39,7 +39,7 @@ impl Frame {
 /// # Error handling
 ///
 /// - **Protocol errors** (`InvalidHeaderVersion`, `InvalidInverseVersion`):
-///   Parsing stops immediately. The connection must be closed per ISO 13400-2 §7.2.
+///   Parsing stops immediately. The connection must be closed per ISO 13400-2  7.2.
 /// - **Oversized frames**: Entire frame is skipped when complete. Partial frames
 ///   wait for more data to avoid misinterpreting payload as header.
 /// - **Unknown payload types**: Frame is consumed and error returned, but parsing
@@ -49,9 +49,7 @@ pub struct Framer {
 }
 
 impl Framer {
-    /// Create a new framer with an empty internal buffer.
-    ///  #[derive(new)] could be used here  , now to avoid the new dependency on the `derive-new` crate for a simple constructor,
-    ///  we implement it manually. Future improvement: If similar patterns emerge across the codebase, consider using #[derive(new)] for consistency and reduced boilerplate.
+    /// Creates a framer with an empty internal buffer.
     pub fn new() -> Self {
         Self { buffer: Vec::new() }
     }
@@ -83,7 +81,7 @@ impl Framer {
                 Ok(h) => h,
                 Err(e) => {
                     // Protocol version errors — no recovery possible mid-stream.
-                    // Return error and let connection handler close per ISO 13400-2 §7.2
+                    // Return error and let connection handler close per ISO 13400-2  7.2
                     frames.push(Err(e));
                     break;
                 }

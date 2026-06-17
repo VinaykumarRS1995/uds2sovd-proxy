@@ -9,70 +9,56 @@
 // https://www.apache.org/licenses/LICENSE-2.0
 
 //! DoIP protocol and handler errors.
-//!
-//! Error variants map to either Generic Header NACK codes (ISO 13400-2 Table 18)
-//! or silent discard behavior per the specification.
 
 use crate::doip::message::DoipNackCode;
 use crate::proxy::SovdProxyError;
 
-/// DoIP protocol errors and handler failures.
-///
-/// Most variants map to Generic Header NACK codes sent to the client.
-/// Special cases like `EIDNotMatched` and `VinNotMatched` trigger silent
-/// discard per ISO 13400-2 §7.6.1 discovery behavior.
+/// Errors returned while parsing or handling DoIP messages.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// Protocol version byte doesn't match expected value (ISO 13400-2 §7.3).
-    /// Connection should be closed after sending NACK.
+    /// Returned when the protocol version byte is invalid.
     #[error("invalid header version: expected 0xFD, got {0:#x}")]
     InvalidHeaderVersion(u8),
 
-    /// Inverse version byte doesn't match ~PROTOCOL_VERSION (ISO 13400-2 §7.3).
-    /// Connection should be closed after sending NACK.
+    /// Returned when the inverse protocol version byte is invalid.
     #[error("invalid inverse version: expected 0x02, got {0:#x}")]
     InvalidInverseVersion(u8),
 
+    /// Returned when no handler or payload enum variant exists for a payload type.
     #[error("unknown DoIP payload type: {0:#06x}")]
     UnknownPayloadType(u16),
 
+    /// Returned when the payload length does not match the protocol requirement.
     #[error("invalid payload length: expected {expected}, got {actual}")]
     InvalidPayloadLength { expected: u32, actual: usize },
 
+    /// Returned when a payload is shorter than required.
     #[error("payload too short: expected at least {expected} bytes, got {actual}")]
     PayloadTooShort { expected: usize, actual: usize },
 
+    /// Returned when a payload exceeds the accepted size.
     #[error("payload length {0} exceeds maximum allowed size")]
     PayloadTooLarge(usize),
 
-    /// Payload received when none was expected (e.g., AliveCheck with data).
+    /// Returned when a payload is present where none is allowed.
     #[error("unexpected payload: expected {expected} bytes, got {actual}")]
     UnexpectedPayload { expected: usize, actual: usize },
 
+    /// Returned when backend diagnostic processing fails.
     #[error("SOVD proxy error: {0}")]
     Proxy(#[from] SovdProxyError),
 
-    /// Discovery request EID doesn't match this entity's EID.
-    /// Per ISO 13400-2 §7.6.1, entity remains silent (no NACK sent).
+    /// Returned when a vehicle-identification EID does not match this entity.
     #[error("no matching EID for request")]
     EIDNotMatched,
 
-    /// Discovery request VIN doesn't match this entity's VIN.
-    /// Per ISO 13400-2 §7.6.1, entity remains silent (no NACK sent).
+    /// Returned when a vehicle-identification VIN does not match this entity.
     #[error("no matching VIN for request")]
     VinNotMatched,
 }
 
 impl Error {
-    /// Maps this error to the appropriate Generic Header NACK code
-    /// per ISO 13400-2 Table 18.
-    ///
-    /// # Special cases
-    ///
-    /// - `EIDNotMatched`/`VinNotMatched`: Return `IncorrectPattern` as defensive
-    ///   fallback, though these errors should trigger silent discard in the transport
-    ///   layer per ISO 13400-2 §7.6.1, not NACK generation.
-    /// - `Proxy(_)`: Maps to `IncorrectPattern` until real proxy error handling is wired.
+    /// Returns the Generic Header NACK code associated with this error.
     pub fn nack_code(&self) -> DoipNackCode {
         match self {
             Error::InvalidHeaderVersion(_) | Error::InvalidInverseVersion(_) => {

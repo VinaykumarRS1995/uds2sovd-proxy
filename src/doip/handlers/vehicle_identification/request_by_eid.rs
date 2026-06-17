@@ -19,13 +19,14 @@ use crate::doip::{
 
 use super::utils::create_vi_response;
 
-/// Handles 0x0002 — responds only if the requested EID matches.
+/// Handles `VehicleIdentificationRequestWithEid` messages.
 pub struct IdentifyVehicleByEidHandler {
     ecu_config: EcuConfig,
     logical_address: LogicalAddress,
 }
 
 impl IdentifyVehicleByEidHandler {
+    /// Creates a handler from ECU identity values and the server logical address.
     pub fn new(ecu_config: EcuConfig, logical_address: LogicalAddress) -> Self {
         Self {
             ecu_config,
@@ -40,7 +41,6 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleByEidHandler 
     }
 
     fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
-        // ISO 13400-2 §7.6.1.3: EID must be exactly 6 bytes
         if udp_request.payload().len() != EID_LEN {
             return Err(Error::InvalidPayloadLength {
                 expected: EID_LEN as u32,

@@ -10,185 +10,124 @@ terms of the Apache License Version 2.0 which is available at
 https://www.apache.org/licenses/LICENSE-2.0
 -->
 
-#  UDS-to-SOVD Proxy 
+# 🔌 UDS-to-SOVD Proxy 🚗
 
-This repository contains the UDS-to-SOVD Proxy of the [Eclipse OpenSOVD](https://github.com/eclipse-opensovd) project.
+This repository contains the UDS-to-SOVD Proxy of the Eclipse OpenSOVD project and its documentation.
 
-In the SOVD (Service-Oriented Vehicle Diagnostics) context, the UDS-to-SOVD Proxy serves as a protocol translation gateway between legacy UDS (Unified Diagnostic Services) based diagnostic tools and the modern SOVD-based diagnostic architecture.
+In the SOVD (Service-Oriented Vehicle Diagnostics) context, the UDS-to-SOVD Proxy serves as a
+protocol translation gateway between legacy UDS (Unified Diagnostic Services) based diagnostic
+tools and the modern SOVD-based diagnostic architecture.
 
-It accepts UDS requests over DoIP (Diagnostics over IP, [ISO 13400-2](https://www.iso.org/standard/74785.html)) and forwards them to an SOVD backend. The SOVD responses are then encoded back into UDS format and returned to the requesting tool.
+It accepts UDS requests over DoIP (Diagnostics over IP), resolves the corresponding SOVD service
+using the diagnostic description (MDD) of the ECU, and translates them into SOVD REST API calls.
+The SOVD responses are then encoded back into UDS format and returned to the requesting tool.
 
-```
-                      ┌──────────────────────────────────┐
-                      │          uds2sovd-proxy          │
-                      │                                  │
-┌──────────┐  DoIP    │  ┌──────────┐   ┌─────────────┐  │     ┌─────────┐
-│Diagnostic│◄────────►│  │  DoIP    │──►│  UDS2SOVD   │──┼────►│  SOVD   │
-│  Tester  │ TCP/UDP  │  │ Server   │   │UDS↔SOVD/REST│  │     │ Backend │
-└──────────┘  :13400  │  └──────────┘   └─────────────┘  │     └─────────┘
-                      │                                  │
-                      └──────────────────────────────────┘
-```
+This enables existing UDS-based diagnostic tools and workflows to seamlessly interact with
+SOVD-enabled vehicle architectures without modification.
 
+## goals
 
-## Goals
+- 🔄 transparent UDS ↔ SOVD protocol translation
+- 🚀 high performance (asynchronous I/O)
+- 🤏 low memory and disk-space consumption
+- 🛡️ safe & secure
+- ⚡ fast startup
+  
+## Conceptual Architecture
 
-- transparent UDS ↔ SOVD protocol translation
-- high performance (asynchronous I/O)
-- low memory and disk-space consumption
-- safe and secure
-- fast startup
+The UDS-to-SOVD Proxy consists of three components:
+1. **DoIP Server** - frontend interface for the UDS tester, handles DoIP discovery and diagnostic sessions, parses incoming DoIP messages, and dispatches them to the appropriate protocol handlers.
+2. **UDS-to-SOVD translation** - translates UDS requests into SOVD REST API calls and vice-versa.
+3. **SOVD Proxy** - backend to send HTTP requests to SOVD server & handles responses.
 
-## Introduction
+![UDS-to-SOVD Proxy Components](docs/components.svg)
 
-The proxy consists of a **DoIP Server** (handles the DoIP wire protocol over TCP :13400 / UDP :13400) and the **UDS2SOVD translation layer** (forwards UDS request bytes to an SOVD backend via the `SovdProxy` trait).
+At a high level, testers use UDP for discovery and TCP for diagnostic sessions. Incoming DoIP messages are parsed and dispatched to protocol handlers. Diagnostic payloads are then transformed into SOVD REST API calls and sent to the SOVD server. The responses are then translated back into UDS format and returned to the tester.
 
-**Discovery** happens over UDP — testers broadcast vehicle identification requests and the server responds with its VIN (Vehicle Identification Number), EID (Entity Identifier), and logical address. **Diagnostics** happen over TCP — after a routing activation handshake, the tester sends UDS requests which the server forwards to the UDS2SOVD layer.
+The **DoIP Server** consists of below modules:
+1. **Transport handling** - UDP for discovery & TCP for diagnostic sessions.
+2. **Protocol processing** - DoIP protocol specific processing by dispatching requests to the handlers.
 
-**Current state:** The SOVD proxy is a stub (returns NRC 0x11 — serviceNotSupported).
-The DoIP protocol layer is fully functional for the supported message types below.
+![DoIP Server](docs/doip_server.svg)
 
-## What It Does
-
-- Accepts **TCP connections** on port 13400 for diagnostic sessions
-- Accepts **UDP datagrams** on port 13400 for vehicle discovery
-- Parses and validates DoIP headers (ISO 13400-2 §7.3)
-- Routes messages to type-safe handlers via a generic dispatcher
-- Forwards UDS bytes to the `SovdProxy` trait implementation
-- Manages concurrent TCP sessions with RAII-based slot tracking
-- Supports TOML-based configuration or sensible defaults
-
-### Supported Messages
-
-| Payload Type | Name | Transport | Behavior |
-|-------------|------|-----------|----------|
-| 0x0001 | VehicleIdentificationRequest | UDP | Announces this entity |
-| 0x0002 | VehicleIdentificationByEID | UDP | Responds if EID matches, silent otherwise (ISO §7.6.1) |
-| 0x0003 | VehicleIdentificationByVIN | UDP | Responds if VIN matches, silent otherwise (ISO §7.6.1) |
-| 0x4001 | EntityStatusRequest | UDP | Reports node type and capacity |
-| 0x0005 | RoutingActivationRequest | TCP | Accepts handshake |
-| 0x0007 | AliveCheckRequest | TCP | Confirms connection is live |
-| 0x8001 | DiagnosticMessage | TCP | Forwards UDS payload, returns ECU response |
-
-## Limitations
-
-> **Important:** This is an early-stage implementation. The following are known gaps:
-
-| Limitation | Impact |
-|---|---|
-| SOVD proxy is a stub | Returns NRC 0x11 for all UDS requests |
-| No session lifecycle state machine | Diagnostics accepted without routing activation |
-| No NRC 0x78 response-pending | Slow backends will cause tester timeouts |
-| No TLS / DoIP security | ISO 13400-3 not implemented |
-| No vehicle announcement broadcasting | Server responds to queries only |
-| Single logical address | No multi-ECU routing |
-| No config validation | Invalid values accepted silently |
-
-## Future Work
-
-- Real SOVD backend integration (async HTTP proxy)
-- DoIP session lifecycle state machine (ISO 13400-2 §9.3)
-- UDS NRC 0x78 response-pending for slow backends
-- Configuration validation at startup
-- TLS support (ISO 13400-3)
-- Structured logging with session correlation
-- Multi-ECU routing support
-- Vehicle announcement broadcasting (periodic + on-connect)
-- CLI argument parsing (e.g., clap)
-- Integration test harness with simulated DoIP client
-
-### Usage
-
-1. Run with defaults (TCP `127.0.0.1:13400`, UDP `0.0.0.0:13400`):
-   ```sh
-   cargo run -p doip-server
-   ```
-2. Or with a TOML config file (see [`sample-doip-server.toml`](sample-doip-server.toml)):
-   ```sh
-   cargo run -p doip-server -- <path of config toml file>
-   ```
-3. Verify with the E2E tester (proxy must be running):
-   ```sh
-   cargo run -p doip-client
-   ```
-
-### Configuration
-
-If no configuration file is provided, the system will apply default settings:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| TCP address | `127.0.0.1:13400` | Where TCP clients connect |
-| UDP address | `0.0.0.0:13400` | Where UDP broadcasts are received |
-| Max connections | `10` | Concurrent TCP sessions |
-| Read buffer | `4096` bytes | TCP read chunk size |
-| Logical address | `0x0001` | DoIP entity address |
-| VIN | `00000000000000000` | Vehicle Identification Number |
-| EID | `00:00:00:00:00:00` | Entity Identifier (MAC address) |
-| GID | `00:00:00:00:00:00` | Group Identifier |
-
-## Building
-
-### Prerequisites
-
-Rust toolchain ≥ 1.85 — install via [rustup](https://rustup.rs/).
-
-### Build the Executable
+## Getting Started
 
 ```sh
-cargo build --release
+cargo build
+
+cargo run -p uds2sovd-proxy
 ```
 
-## Developing
+To run uds2sovd-proxy with custom configuration refer to [Usage](docs/usage.md).
 
-### Pre Commit
+## Documentation
+
+### Code Documentation (Rustdoc)
+
+The core library documentation is the primary API reference.
 
 ```sh
+# View the library documentation (main entry point)
+cargo doc-lib
+
+# Or without dependencies documentation:
+cargo doc --package uds2sovd-proxy-lib --no-deps --open
+```
+
+This includes:
+- API reference for all core modules
+- Quick start examples
+- Backend implementation guide
+
+**Additional Resources:**
+
+```sh
+# View the server binary documentation
+cargo doc --package uds2sovd-proxy --no-deps --open
+
+# View the example client
+cargo doc --package doip-example --no-deps --open
+
+# View all workspace crates at once
+cargo doc-all
+```
+
+### Further Reading
+
+| Document | Description |
+| --- | --- |
+| [Detailed design](docs/detailed_design.md) | System architecture and design rationale |
+| [Usage](docs/usage.md) | Usage guide |
+| [Limitations](docs/limitation.md) | Current functional and operational limitations |
+| [Future work](docs/todo.md) | TODO items and roadmap |
+
+
+## developing
+
+### pre commit
+```shell
 uv run https://raw.githubusercontent.com/eclipse-opensovd/cicd-workflows/main/run_checks.py
 ```
+### codestyle
 
-### Codestyle
+see [codestyle](CODESTYLE.md)
 
-See [CODESTYLE.md](CODESTYLE.md).
+### testing
 
-### Testing
+#### unit tests
 
-#### Unit Tests
-
-Unit tests are placed in the relevant module as usual in Rust:
+Unittests are placed in the relevant module as usual in rust:
 ```rust
 ...
 #[cfg(test)]
-mod tests {
+mod test {
     ...
 }
 ```
 
 Run unit tests with:
-```sh
+```shell
 cargo test --locked --lib
 ```
 
-#### Integration Tests
-
-Open one terminal and start the proxy. Then open a second terminal and run the E2E tester:
-```sh
-cargo run -p doip-server
-cargo run -p doip-client
-```
-
-Limitations
-Important: This is an early-stage implementation. The following are known gaps:
-
-Limitation	Impact
-SOVD proxy is a stub	Returns NRC 0x11 for all UDS requests
-No session lifecycle state machine	Diagnostics accepted without routing activation
-No NRC 0x78 response-pending	Slow backends will cause tester timeouts
-No TLS / DoIP security	ISO 13400-3 not implemented
-No vehicle announcement broadcasting	Server responds to queries only
-Single logical address	No multi-ECU routing
-No config validation	Invalid values accepted silently
-
-## License
-
-Apache-2.0 — see [LICENSE](LICENSE).
+#### integration tests

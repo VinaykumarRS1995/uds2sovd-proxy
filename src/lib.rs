@@ -8,29 +8,62 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! # uds2sovd — DoIP Server Library
+#![doc = include_str!("../docs/detailed_design.md")]
+
+//! # UDS-to-SOVD Library
 //!
-//! A DoIP (Diagnostics over Internet Protocol) server library that accepts
-//! UDS diagnostic requests from DoIP clients and forwards them to an SOVD backend.
+//! Implements ISO 13400-2 Diagnostics over Internet Protocol (DoIP) as a bridge
+//! between UDS (Unified Diagnostic Services) and SOVD backends.
 //!
-//! ## What this library offers
+//! This library provides the core protocol implementation. For ready-to-use applications, see:
+//! - **[uds2sovd-proxy binary](../uds2sovd_proxy/index.html)**: Standalone server
+//! - **[example client](../example/index.html)**: Test client for development
 //!
-//! config: Load server settings (bind addresses, ECU identity) from TOML or in-memory.
-//! doip: DoIP protocol: message parsing, handlers for vehicle identification,
-//!   routing activation, alive check, entity status, and diagnostic messages.
-//! proxy: Forward UDS bytes to an SOVD backend. Implement the SovdProxy trait
-//!   for your backend; StubProxy and MockProxy are provided for development and testing.
-//! server: TCP/UDP transport layer with concurrent listeners and graceful shutdown.
-//! error: Unified error type for protocol and I/O errors.
+//! # Quick Start
 //!
-//! ## How to use
+//! ```no_run
+//! use uds2sovd_proxy_lib::{config, doip, proxy};
+//! use std::sync::Arc;
 //!
-//! 1. Implement the SovdProxy trait for your SOVD backend.
-//! 2. Create a config (TOML file or in-memory).
-//! 3. Build the server and run it.
+//! let cfg = config::DefaultConfigProvider::new(config::ServerConfig::default()).load()?;
+//! let (tcp_cfg, udp_cfg, ecu_cfg) = cfg.into_parts();
+//! let tcp_dispatcher = doip::tcp_dispatcher(tcp_cfg.logical_address(), Arc::new(proxy::stub::StubProxy));
+//! let udp_dispatcher = doip::udp_dispatcher(udp_cfg.logical_address(), &ecu_cfg);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 //!
-//! See `app/main.rs` for a working example and `app/sample-doip-server.toml` for
-//! a reference configuration
+//! # Core Modules
+//!
+//! - [`config`]: Configuration loading from defaults or TOML files
+//! - [`doip`]: Protocol types, dispatchers, and message handling
+//! - [`server`]: TCP and UDP transport runtimes
+//! - [`proxy`]: Backend diagnostic interface and implementations
+//! - [`error`]: Application-level error aggregation
+//!
+//! # Implementing a Backend
+//!
+//! Implement the [`proxy::SovdProxy`] trait to connect your diagnostic system:
+//!
+//! ```ignore
+//! use uds2sovd_proxy_lib::proxy::SovdProxy;
+//!
+//! pub struct MyBackend;
+//!
+//! impl SovdProxy for MyBackend {
+//!     fn process(&self, uds_request: &[u8]) -> Result<Vec<u8>, _> {
+//!         // Forward UDS request to your diagnostic backend
+//!         // Return the response bytes
+//!         Ok(Vec::new())
+//!     }
+//! }
+//! ```
+//!
+//! # Learn More
+//!
+//! - **API Documentation**: Explore modules and types above
+//! - **Architecture**: See embedded design documentation below
+//! - **Running the Server**: See [uds2sovd-proxy binary](../uds2sovd_proxy/index.html) crate docs
+//! - **Testing**: See [example client](../example/index.html) crate documentation
 
 pub mod config;
 pub mod doip;

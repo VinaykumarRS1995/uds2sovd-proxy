@@ -8,12 +8,8 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Vehicle Identification handlers (ISO 13400-2 §7.6).
-//!
-//! Split into one module per request variant (0x0001, 0x0002, 0x0003)
-//! with shared response assembly in utils. Each handler implements
-//! "PayloadHandler<UdpPayloadType, UdpRequest>".
-//!
+//! Handlers for UDP vehicle-identification requests.
+
 mod request;
 mod request_by_eid;
 mod request_by_vin;

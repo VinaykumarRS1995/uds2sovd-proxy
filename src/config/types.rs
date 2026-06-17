@@ -8,26 +8,21 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-use std::net::SocketAddr;
-
+//! Configuration data model.
+//!
+//! Defines the TCP, UDP, and ECU settings consumed by the server at startup.
 use serde::Deserialize;
+use std::net::SocketAddr;
 
 use super::defaults;
 use crate::doip::types::{Eid, Gid, LogicalAddress, Vin};
 
-/// Top-level server configuration, split into TCP, UDP, and ECU sections.
+/// Complete runtime configuration for the server.
 ///
-///Private fields
-///
-/// Fields are private and accessed via `into_parts()` to:
-/// - Force explicit destructuring of config sections
-/// - Prevent accidental mixing of TCP/UDP/ECU settings
-/// - Make it obvious in calling code which config section is being used
-///
-/// # Serde behavior
-///
-/// `#[serde(default)]` allows partial TOML files — missing sections use Default.
-/// Users only specify what they want to change from defaults.
+/// The configuration is split into TCP, UDP, and ECU sections.
+/// `#[serde(default)]` allows omitted sections/fields to fall back to
+/// compile-time defaults.
+
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct ServerConfig {
@@ -37,15 +32,14 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    /// Destructure into the three sub-configs.
+    /// Consumes this config and returns `(tcp, udp, ecu)` in that order.
     pub fn into_parts(self) -> (TcpConfig, UdpConfig, EcuConfig) {
         (self.tcp, self.udp, self.ecu)
     }
 }
 
-/// TCP transport settings: listen address, connection limits, buffer size.
-///
-/// Using #[serde(default)] allows omitting fields in TOML — they'll use Default values.
+/// TCP transport settings.
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct TcpConfig {
@@ -56,30 +50,28 @@ pub struct TcpConfig {
 }
 
 impl TcpConfig {
-    /// TCP listen address (e.g. `127.0.0.1:13400`).
+    /// Returns the TCP listen address.
     pub fn address(&self) -> SocketAddr {
         self.address
     }
 
-    /// Maximum number of concurrent TCP sessions.
+    /// Returns the maximum number of concurrent TCP sessions.
     pub fn max_connections(&self) -> usize {
         self.max_connections
     }
 
-    /// This entity's DoIP logical address.
+    /// Returns the DoIP logical address used on the TCP path.
     pub fn logical_address(&self) -> LogicalAddress {
         self.logical_address
     }
 
-    /// TCP read buffer size in bytes.
+    /// Returns the TCP read buffer size in bytes.
     pub fn read_buffer_size(&self) -> usize {
         self.read_buffer_size
     }
 }
 
-/// UDP transport settings: listen address and logical address.
-///
-/// Using #[serde(default)] allows omitting fields in TOML — they'll use Default values.
+/// UDP transport settings.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct UdpConfig {
@@ -88,12 +80,12 @@ pub struct UdpConfig {
 }
 
 impl UdpConfig {
-    /// UDP listen address (e.g. `0.0.0.0:13400`).
+    /// Returns the UDP listen address.
     pub fn address(&self) -> SocketAddr {
         self.address
     }
 
-    /// This entity's DoIP logical address.
+    /// Returns the DoIP logical address used on the UDP path.
     pub fn logical_address(&self) -> LogicalAddress {
         self.logical_address
     }
@@ -119,9 +111,7 @@ impl Default for UdpConfig {
     }
 }
 
-/// ECU identity settings: VIN, EID, and GID used in vehicle identification responses.
-///
-/// Note: No #[serde(default)] here since VIN/EID are required configuration parameters.
+/// ECU identity values advertised in DoIP responses.
 #[derive(Debug, Clone, Deserialize)]
 pub struct EcuConfig {
     vin: Vin,
@@ -130,19 +120,22 @@ pub struct EcuConfig {
 }
 
 impl EcuConfig {
-    /// Create a new ECU config from the given identity fields.
+    /// Creates ECU identity settings from VIN, EID, and GID values.
     pub fn new(vin: Vin, eid: Eid, gid: Gid) -> Self {
         Self { vin, eid, gid }
     }
-    /// Vehicle Identification Number (17 ASCII characters).
+
+    /// Returns the configured VIN.
     pub fn vin(&self) -> Vin {
         self.vin
     }
-    /// Entity Identifier (6 bytes, typically MAC address).
+
+    /// Returns the configured EID.
     pub fn eid(&self) -> Eid {
         self.eid
     }
-    /// Group Identifier (6 bytes).
+
+    /// Returns the configured GID.
     pub fn gid(&self) -> Gid {
         self.gid
     }

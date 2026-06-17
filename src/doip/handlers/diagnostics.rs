@@ -18,34 +18,24 @@ use crate::doip::{
 };
 use crate::proxy::SovdProxy;
 
-/// Handles DiagnosticMessage (0x8001, ISO 13400-2 §9.11).
-/// Forwards UDS bytes to the SOVD proxy and returns the ECU response.
+/// Handles `DiagnosticMessage` requests.
+///
+/// The handler forwards the UDS payload to a [`SovdProxy`] and wraps the
+/// returned bytes in a DoIP acknowledgment response.
 pub struct DiagnosticsHandler {
     proxy: Arc<dyn SovdProxy>,
 }
 
 impl DiagnosticsHandler {
+    /// Creates a diagnostic handler backed by the provided proxy.
     pub fn new(proxy: Arc<dyn SovdProxy>) -> Self {
         Self { proxy }
     }
 
-    /// Protocol logic (ISO 13400-2 #9.11): forward UDS bytes to the SOVD proxy,
-    /// wrap the response in a DiagnosticMessagePositiveAck.
+    /// Forwards a diagnostic payload and builds the response frame.
     fn forward(&self, src: u16, tgt: u16, uds: &[u8]) -> Result<Response, Error> {
-        // TODO: Add NRC 0x78 (responsePending) support per ISO 14229-1.
-        // When the real SOVD backend is wired:
-        // 1. Start a P2*Server timer (default 50ms) before calling proxy.process()
-        // 2. If the timer expires before proxy responds, send NRC 0x78 to the tester
-        // 3. Restart with extended P2*Server_max timer (default 5000ms)
-        // 4. Repeat until the proxy returns or max retries exceeded
-        // This requires proxy.process() to be async (see proxy/mod.rs TODO).
         let ecu_response = self.proxy.process(uds)?;
 
-        // Payload layout:
-        // [0..2] source address (server → originally tgt)
-        // [2..4] target address (client → originally src)
-        // [4]    ack code: 0x00 = ACK
-        // [5..]  UDS response data from ECU
         let mut payload = Vec::with_capacity(DIAG_ACK_HEADER_LEN + ecu_response.len());
         payload.extend_from_slice(&tgt.to_be_bytes()); // server address
         payload.extend_from_slice(&src.to_be_bytes()); // client address
@@ -64,7 +54,6 @@ impl PayloadHandler<TcpPayloadType, TcpRequest> for DiagnosticsHandler {
     }
 
     fn handle(&self, tcp_request: TcpRequest) -> Result<Response, Error> {
-        // Payload layout: source_addr(2) + target_addr(2) + uds_data(N)
         if tcp_request.payload().len() < DIAG_MSG_MIN_PAYLOAD_LEN {
             return Err(Error::PayloadTooShort {
                 expected: DIAG_MSG_MIN_PAYLOAD_LEN,

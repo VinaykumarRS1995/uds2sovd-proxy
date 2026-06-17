@@ -11,8 +11,8 @@
 //! DoIP protocol constants per ISO 13400-2.
 //!
 //! Organized by protocol section:
-//! - Header constants (§7.3)
-//! - Response codes (§9.x)
+//! - Header constants ( 7.3)
+//! - Response codes ( 9.x)
 //! - Field lengths
 //! - Message size limits
 
@@ -53,7 +53,7 @@ pub const VIN_LEN: usize = 17;
 /// EID (Entity Identification / MAC address) length in bytes.
 pub const EID_LEN: usize = 6;
 
-// Entity status (ISO 13400-2 §7.6.3)
+// Entity status (ISO 13400-2  7.6.3)
 
 /// DoIP node type: DoIP gateway (0x00) or DoIP node (0x01).
 pub const DOIP_NODE_TYPE: u8 = 0x01;
@@ -61,17 +61,17 @@ pub const DOIP_NODE_TYPE: u8 = 0x01;
 /// Entity status response payload length: 1 (node type) + 1 (max TCP) + 1 (current TCP) + 4 (max data size).
 pub const ENTITY_STATUS_RESPONSE_LEN: usize = 7;
 
-// Maximum payload (ISO 13400-2 §7.3)
+// Maximum payload (ISO 13400-2  7.3)
 
 /// Maximum DoIP payload length accepted by this implementation.
 pub const MAX_DOIP_PAYLOAD_LEN: usize = 65_535;
 
-// Routing Activation (ISO 13400-2 §9.9)
+// Routing Activation (ISO 13400-2  9.9)
 
 /// Minimum length of a routing activation request payload (bytes).
 pub const ROUTING_ACTIVATION_REQUEST_MIN_LEN: usize = 11;
 
-// Diagnostic Message (ISO 13400-2 §9.11)
+// Diagnostic Message (ISO 13400-2  9.11)
 
 /// Minimum diagnostic message payload length: 2 (source addr) + 2 (target addr).
 pub const DIAG_MSG_MIN_PAYLOAD_LEN: usize = 4;

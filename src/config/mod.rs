@@ -8,7 +8,13 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Server configuration: types, defaults, and pluggable providers.
+//! Configuration types and loaders.
+//!
+//! Provides the runtime configuration model ([`ServerConfig`]) and the abstractions
+//! used to load it from different sources. Use the [`ConfigProvider`] trait to implement
+//! custom configuration sources, or use the built-in providers:
+//! - [`DefaultConfigProvider`]: Load built-in defaults
+//! - [`TomlConfigProvider`]: Load from a TOML file
 
 pub mod defaults;
 pub mod error;
@@ -19,9 +25,15 @@ pub use error::ConfigError;
 pub use provider::{DefaultConfigProvider, TomlConfigProvider};
 pub use types::{EcuConfig, ServerConfig, TcpConfig, UdpConfig};
 
-/// Trait for loading server configuration from any source.
+/// Loads a complete [`ServerConfig`].
+///
+/// Implementations may obtain configuration from different sources, such as
+/// TOML files or in-memory defaults.
 pub trait ConfigProvider {
-    /// Load and return a complete [`ServerConfig`].
-    /// Returns an error if the configuration cannot be loaded or parsed.
+    /// Loads and returns a complete [`ServerConfig`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigError`] if configuration loading fails.
     fn load(&self) -> Result<ServerConfig, ConfigError>;
 }

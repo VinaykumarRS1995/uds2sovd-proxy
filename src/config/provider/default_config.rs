@@ -8,26 +8,32 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//use super::super instead of crate::config to avoid circular dependency with config provider during compilation.
+//! Default configuration provider.
+//!
+//! This provider wraps an already constructed [`ServerConfig`] and
+//! returns it on every call to [`ConfigProvider::load`].
+//! It performs no file I/O.
+
 use super::super::{ConfigError, ConfigProvider};
 use crate::config::types::ServerConfig;
 
-/// Config provider that holds a pre-built [`ServerConfig`] in memory.
-/// Use when configuration is constructed programmatically rather than loaded from a file.
+/// [`ConfigProvider`] backed by a stored [`ServerConfig`].
 pub struct DefaultConfigProvider {
     config: ServerConfig,
 }
 
 impl DefaultConfigProvider {
-    /// Wrap an existing config for use as a provider.
+    /// Creates a provider that always returns the supplied configuration.
     pub fn new(config: ServerConfig) -> Self {
         Self { config }
     }
 }
 
 impl ConfigProvider for DefaultConfigProvider {
+    /// Returns a clone of the stored configuration.
+    ///
+    /// This operation is infallible because it performs no I/O and no parsing.
     fn load(&self) -> Result<ServerConfig, ConfigError> {
-        // Default config is always valid, so this never fails
         Ok(self.config.clone())
     }
 }

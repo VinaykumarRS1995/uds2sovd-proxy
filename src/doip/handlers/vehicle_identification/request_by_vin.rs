@@ -8,7 +8,7 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Handler for VehicleIdentificationRequestWithVIN (0x0003, ISO 13400-2 §7.6.1.2).
+//! Handler for VIN-filtered vehicle-identification requests.
 
 use super::utils::create_vi_response;
 use crate::config::EcuConfig;
@@ -20,13 +20,14 @@ use crate::doip::{
     types::{LogicalAddress, Vin},
 };
 
-/// Handles 0x0003 — responds only if the requested VIN matches.
+/// Handles `VehicleIdentificationRequestWithVin` messages.
 pub struct IdentifyVehicleByVinHandler {
     ecu_config: EcuConfig,
     logical_address: LogicalAddress,
 }
 
 impl IdentifyVehicleByVinHandler {
+    /// Creates a handler from ECU identity values and the server logical address.
     pub fn new(ecu_config: EcuConfig, logical_address: LogicalAddress) -> Self {
         Self {
             ecu_config,
@@ -41,7 +42,6 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleByVinHandler 
     }
 
     fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
-        // ISO 13400-2 §7.6.1.2: VIN must be exactly 17 bytes
         if udp_request.payload().len() != VIN_LEN {
             return Err(Error::InvalidPayloadLength {
                 expected: VIN_LEN as u32,

@@ -16,28 +16,21 @@ use crate::doip::{
     types::LogicalAddress,
 };
 
-/// Handles RoutingActivationRequest (0x0005, ISO 13400-2 §9.9).
-/// Currently always returns success (0x10); state machine is future work.
+/// Handles `RoutingActivationRequest` messages.
 pub struct RoutingActivationHandler {
     server_logical_address: LogicalAddress,
 }
 
 impl RoutingActivationHandler {
+    /// Creates a routing-activation handler for the supplied server address.
     pub fn new(server_logical_address: LogicalAddress) -> Self {
         Self {
             server_logical_address,
         }
     }
 
-    /// Shared protocol logic (ISO 13400-2 #9.9).
-    /// Returns a RoutingActivationResponse payload.
+    /// Builds a `RoutingActivationResponse` payload.
     fn activate(&self, client_address: u16, _activation_type: u8) -> Response {
-        // Payload layout (13 bytes):
-        // [0..2]  client logical address
-        // [2..4]  server logical address
-        // [4]     response code: 0x10 = success
-        // [5..9]  reserved ISO (0x00000000)
-        // [9..13] reserved OEM (0x00000000)
         let mut payload = Vec::with_capacity(13);
         payload.extend_from_slice(&client_address.to_be_bytes());
         payload.extend_from_slice(&self.server_logical_address.to_be_bytes());
@@ -54,7 +47,6 @@ impl PayloadHandler<TcpPayloadType, TcpRequest> for RoutingActivationHandler {
     }
 
     fn handle(&self, tcp_request: TcpRequest) -> Result<Response, Error> {
-        // Payload layout (11 bytes): source_addr(2) + activation_type(1) + reserved(8)
         if tcp_request.payload().len() < ROUTING_ACTIVATION_REQUEST_MIN_LEN {
             return Err(Error::PayloadTooShort {
                 expected: ROUTING_ACTIVATION_REQUEST_MIN_LEN,
