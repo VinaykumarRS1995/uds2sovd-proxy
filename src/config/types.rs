@@ -8,16 +8,22 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-use std::net::SocketAddr;
-
+//! Configuration data model
+//!
+//! This module defines the runtime configuration used by the DoIP server.
+//!
+//! Configuration is grouped into TCP, UDP, and ECU sections.
+//!
+//! Configuration values are deserialized from TOML files via serde and may fall back to compile-time defaults if not specified.
 use serde::Deserialize;
+use std::net::SocketAddr;
 
 use super::defaults;
 use crate::doip::types::{Eid, Gid, LogicalAddress, Vin};
 
 /// Top-level server configuration, split into TCP, UDP, and ECU sections.
 ///
-///Private fields
+/// Private fields
 ///
 /// Fields are private and accessed via `into_parts()` to:
 /// - Force explicit destructuring of config sections
@@ -28,6 +34,7 @@ use crate::doip::types::{Eid, Gid, LogicalAddress, Vin};
 ///
 /// `#[serde(default)]` allows partial TOML files — missing sections use Default.
 /// Users only specify what they want to change from defaults.
+
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct ServerConfig {
@@ -37,15 +44,24 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    /// Destructure into the three sub-configs.
+    /// Consumes the configuration and returns the individual
+    /// transport and ECU configuration sections.
+    ///
+    /// This encourages explicit ownership transfer and makes
+    /// configuration usage visible at the call site.
     pub fn into_parts(self) -> (TcpConfig, UdpConfig, EcuConfig) {
         (self.tcp, self.udp, self.ecu)
     }
 }
 
-/// TCP transport settings: listen address, connection limits, buffer size.
+/// TCP transport configuration.
 ///
-/// Using #[serde(default)] allows omitting fields in TOML — they'll use Default values.
+/// Controls how the DoIP server accepts and manages
+/// TCP diagnostic connections.
+///
+/// `#[serde(default)]` allows partial TOML files.
+/// Missing fields fall back to compile-time defaults.
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct TcpConfig {
@@ -77,9 +93,12 @@ impl TcpConfig {
     }
 }
 
-/// UDP transport settings: listen address and logical address.
+/// UDP transport configuration.
 ///
-/// Using #[serde(default)] allows omitting fields in TOML — they'll use Default values.
+/// Controls DoIP vehicle discovery and stateless UDP communication.
+///
+/// `#[serde(default)]` allows partial TOML files.
+/// Missing fields fall back to compile-time defaults.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct UdpConfig {
@@ -119,9 +138,13 @@ impl Default for UdpConfig {
     }
 }
 
-/// ECU identity settings: VIN, EID, and GID used in vehicle identification responses.
+/// ECU identity information advertised by the DoIP entity.
 ///
-/// Note: No #[serde(default)] here since VIN/EID are required configuration parameters.
+/// These values are included in vehicle identification
+/// and entity status responses defined by ISO 13400-2.
+///
+/// Note: No `#[serde(default)]` is used because ECU identity
+/// values should be explicitly configured.
 #[derive(Debug, Clone, Deserialize)]
 pub struct EcuConfig {
     vin: Vin,
@@ -134,7 +157,9 @@ impl EcuConfig {
     pub fn new(vin: Vin, eid: Eid, gid: Gid) -> Self {
         Self { vin, eid, gid }
     }
-    /// Vehicle Identification Number (17 ASCII characters).
+    /// Returns the configured Vehicle Identification Number (VIN).
+    ///
+    /// VIN is a 17-character vehicle identifier defined by ISO 3779.    
     pub fn vin(&self) -> Vin {
         self.vin
     }
@@ -142,7 +167,9 @@ impl EcuConfig {
     pub fn eid(&self) -> Eid {
         self.eid
     }
-    /// Group Identifier (6 bytes).
+    /// Returns the configured Group Identifier (GID).
+    ///
+    /// GID identifies a logical group of DoIP entities.
     pub fn gid(&self) -> Gid {
         self.gid
     }

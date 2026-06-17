@@ -8,7 +8,32 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Server configuration: types, defaults, and pluggable providers.
+//! Configuration subsystem for the DoIP server.
+//!
+//! This module defines the configuration model, Configuration loading abstraction,
+//! and provider implementations used by the DoIP server.
+//!
+//! # Design Rationale
+//!
+//! Configuration loading is separted from configuration usage. The DoIP server consumes a fully constructed [`ServerConfig`]
+//!
+//! ```text
+//! Configuration Source
+//! │
+//! ▼
+//! ConfigProvider
+//! │
+//! ▼
+//! ServerConfig
+//! │
+//! ▼
+//! Server
+//! ```
+//!
+//! This separation allows the same server implementation to be used with different configuration sources, such as:
+//! - TOML files for production deployments
+//! - Default configuration for tests and examples
+//! - Future configuration sources (environment variables, remote configuration services, etc.)
 
 pub mod defaults;
 pub mod error;
@@ -19,9 +44,33 @@ pub use error::ConfigError;
 pub use provider::{DefaultConfigProvider, TomlConfigProvider};
 pub use types::{EcuConfig, ServerConfig, TcpConfig, UdpConfig};
 
-/// Trait for loading server configuration from any source.
+/// # Design Rationale
+///
+/// The DoIP server requires a fully validated configuration
+/// before startup. By introducing a configuration provider
+/// abstraction, the server remains independent of how
+/// configuration is obtained.
+///
+/// This enables:
+///
+/// - TOML-based configuration for production deployments
+/// - In-memory configuration for tests
+/// - Future configuration sources without modifying server code
+///
+/// Abstraction for loading server configuration.
+///
+/// Implementations may load configuration from files,
+/// Default structures, environment variables, or other
+/// configuration backends.
+///
+/// The server depends on this trait rather than concrete
+/// configuration sources, allowing configuration loading
+/// concerns to remain isolated from server startup logic.
 pub trait ConfigProvider {
-    /// Load and return a complete [`ServerConfig`].
-    /// Returns an error if the configuration cannot be loaded or parsed.
+    /// Loads and returns a complete [`ServerConfig`].
+    ///
+    /// # Errors
+    ///
+    ///Returns [`ConfigError`] if configuration loading fails..
     fn load(&self) -> Result<ServerConfig, ConfigError>;
 }

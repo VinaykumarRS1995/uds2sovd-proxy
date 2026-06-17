@@ -8,21 +8,26 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Configuration loading errors.
+//! Configuration subsystem error types.
 //!
-//! Separates file I/O errors from TOML parsing errors for clearer
-//! error messages to users.
+//! These errors represent failures that can occur while loading
+//! and deserializing server configuration.
+//!
+//! Errors are categorized by source to provide clear diagnostics
+//! to users and simplify troubleshooting.
 
-/// Errors that can occur during configuration loading.
+/// Errors produced while loading server configuration.
 ///
-/// Variants distinguish between:
-/// - Missing/unreadable files (`FileRead`)
-/// - Malformed TOML syntax or validation failures (`ParseError`)
+/// The error variants preserve the original failure source,
+/// allowing callers to distinguish between file access failures
+/// and configuration deserialization failures.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
+    ///Failed to read the TOML configuration file.    
     #[error("Failed to read config file: {0}")]
     FileRead(#[from] std::io::Error),
 
+    ///Failed to parse the TOML configuration content.
     #[error("Failed to parse TOML config: {0}")]
     ParseError(#[from] toml::de::Error),
 }
