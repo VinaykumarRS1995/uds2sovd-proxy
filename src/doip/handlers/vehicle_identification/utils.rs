@@ -8,7 +8,7 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Shared response builder for Vehicle Identification handlers (ISO 13400-2 §7.6.2).
+//! Shared response builder for Vehicle Identification handlers (ISO 13400-2  7.6.2).
 
 use crate::config::EcuConfig;
 use crate::doip::{

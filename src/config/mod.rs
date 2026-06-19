@@ -8,32 +8,13 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Configuration subsystem for the DoIP server.
+//! Configuration types and loaders.
 //!
-//! This module defines the configuration model, Configuration loading abstraction,
-//! and provider implementations used by the DoIP server.
-//!
-//! # Design Rationale
-//!
-//! Configuration loading is separted from configuration usage. The DoIP server consumes a fully constructed [`ServerConfig`]
-//!
-//! ```text
-//! Configuration Source
-//! │
-//! ▼
-//! ConfigProvider
-//! │
-//! ▼
-//! ServerConfig
-//! │
-//! ▼
-//! Server
-//! ```
-//!
-//! This separation allows the same server implementation to be used with different configuration sources, such as:
-//! - TOML files for production deployments
-//! - Default configuration for tests and examples
-//! - Future configuration sources (environment variables, remote configuration services, etc.)
+//! Provides the runtime configuration model ([`ServerConfig`]) and the abstractions
+//! used to load it from different sources. Use the [`ConfigProvider`] trait to implement
+//! custom configuration sources, or use the built-in providers:
+//! - [`DefaultConfigProvider`]: Load built-in defaults
+//! - [`TomlConfigProvider`]: Load from a TOML file
 
 pub mod defaults;
 pub mod error;
@@ -44,33 +25,15 @@ pub use error::ConfigError;
 pub use provider::{DefaultConfigProvider, TomlConfigProvider};
 pub use types::{EcuConfig, ServerConfig, TcpConfig, UdpConfig};
 
-/// # Design Rationale
+/// Loads a complete [`ServerConfig`].
 ///
-/// The DoIP server requires a fully validated configuration
-/// before startup. By introducing a configuration provider
-/// abstraction, the server remains independent of how
-/// configuration is obtained.
-///
-/// This enables:
-///
-/// - TOML-based configuration for production deployments
-/// - In-memory configuration for tests
-/// - Future configuration sources without modifying server code
-///
-/// Abstraction for loading server configuration.
-///
-/// Implementations may load configuration from files,
-/// Default structures, environment variables, or other
-/// configuration backends.
-///
-/// The server depends on this trait rather than concrete
-/// configuration sources, allowing configuration loading
-/// concerns to remain isolated from server startup logic.
+/// Implementations may obtain configuration from different sources, such as
+/// TOML files or in-memory defaults.
 pub trait ConfigProvider {
     /// Loads and returns a complete [`ServerConfig`].
     ///
     /// # Errors
     ///
-    ///Returns [`ConfigError`] if configuration loading fails..
+    /// Returns [`ConfigError`] if configuration loading fails.
     fn load(&self) -> Result<ServerConfig, ConfigError>;
 }

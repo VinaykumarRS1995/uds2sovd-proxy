@@ -8,40 +8,29 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! DoIP generic header parsing (ISO 13400-2 §7.3).
-//!
-//! Shared between the TCP `Framer` and the UDP `Handler` to eliminate
-//! duplicated version/length extraction logic and prevent divergence.
+//! DoIP generic header parsing.
 
 use crate::doip::constants::{HEADER_LEN, INVERSE_VERSION, PROTOCOL_VERSION};
 use crate::doip::error::Error;
 
-/// Parsed DoIP generic header (8 bytes).
+/// Parsed DoIP generic header.
 ///
-/// Contains the raw payload type (not yet validated against TCP/UDP-specific
-/// enums) and the declared payload length. The caller is responsible for:
-/// - Checking the payload type against `TcpPayloadType` or `UdpPayloadType`
-/// - Enforcing maximum payload size limits (transport-specific)
-/// - Ensuring enough data is available before calling `parse()`
+/// Contains the raw payload type and declared payload length.
 #[derive(Debug, Clone, Copy)]
 pub struct DoipHeader {
-    /// Raw 2-byte payload type from the header (not yet validated).
+    /// Raw payload type from the header.
     pub payload_type_raw: u16,
-    /// Declared payload length from bytes 4..8 of the header.
+    /// Declared payload length.
     pub payload_len: usize,
 }
 
 impl DoipHeader {
-    /// Parse the 8-byte DoIP generic header, validating version bytes.
-    ///
-    /// # Precondition
-    ///
-    /// `data` must be at least [`HEADER_LEN`] (8) bytes. Panics otherwise.
+    /// Parses an 8-byte DoIP generic header.
     ///
     /// # Errors
     ///
-    /// - [`Error::InvalidHeaderVersion`] if byte 0 ≠ `PROTOCOL_VERSION` (0xFD)
-    /// - [`Error::InvalidInverseVersion`] if byte 1 ≠ `INVERSE_VERSION` (0x02)
+    /// Returns [`Error::InvalidHeaderVersion`] or [`Error::InvalidInverseVersion`]
+    /// if the version fields are invalid.
     pub fn parse(data: &[u8]) -> Result<Self, Error> {
         debug_assert!(
             data.len() >= HEADER_LEN,

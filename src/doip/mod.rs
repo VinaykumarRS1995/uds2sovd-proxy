@@ -8,14 +8,7 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! DoIP (Diagnostics over IP) protocol implementation per ISO 13400-2.
-//!
-//! Provides:
-//! - Message types and parsing for TCP and UDP transports
-//! - Handler trait and dispatcher for routing messages by payload type
-//! - Handlers for vehicle identification, routing activation, alive check,
-//!   entity status, and diagnostic messages
-//! - Protocol constants and type-safe domain types (VIN, EID, LogicalAddress)
+//! DoIP protocol types, handlers, and dispatcher construction.
 
 pub mod constants;
 pub mod dispatch;
@@ -30,16 +23,24 @@ pub use types::{Eid, Gid, LogicalAddress, Vin};
 
 use std::sync::Arc;
 
-// TODO: If the vehicle-identification helper scope grows beyond the current
-// small set of factory functions, consider grouping them under a zero-sized
-// type for better organization and discoverability.
-
-/// Build the TCP dispatcher with all TCP-legal handlers registered.
+/// Builds the TCP dispatcher with these handlers registered:
+/// - [`handlers::RoutingActivationHandler`]
+/// - [`handlers::AliveCheckHandler`]
+/// - [`handlers::DiagnosticsHandler`]
 ///
-/// # Parameters
-/// logical_addr: This entity's DoIP logical address, used in routing activation
-///   and alive check responses.
-/// proxy: SOVD backend proxy invoked for every DiagnosticMessage (0x8001).
+/// # Example
+///
+/// ```no_run
+/// use doipserver_lib::doip;
+/// use doipserver_lib::proxy::StubProxy;
+/// use doipserver_lib::doip::types::LogicalAddress;
+/// use std::sync::Arc;
+///
+/// let dispatcher = doip::tcp_dispatcher(
+///     LogicalAddress::new(0x0001),
+///     Arc::new(StubProxy),
+/// );
+/// ```
 pub fn tcp_dispatcher(
     logical_addr: LogicalAddress,
     proxy: Arc<dyn crate::proxy::SovdProxy>,
@@ -52,11 +53,26 @@ pub fn tcp_dispatcher(
     dispatcher
 }
 
-/// Build the UDP dispatcher with all UDP-legal handlers registered.
+/// Builds the UDP dispatcher with these handlers registered:
+/// - [`handlers::IdentifyVehicleHandler`]
+/// - [`handlers::IdentifyVehicleByEidHandler`]
+/// - [`handlers::IdentifyVehicleByVinHandler`]
+/// - [`handlers::EntityStatusHandler`] with `max_connections = 10` and
+///   `max_data_size = 65_535`
 ///
-/// # Parameters
-/// logical_addr: This entity's DoIP logical address included in identification responses.
-/// ecu: ECU identity settings (VIN, EID, GID) used in vehicle identification responses.
+/// # Example
+///
+/// ```no_run
+/// use doipserver_lib::doip;
+/// use doipserver_lib::config::EcuConfig;
+/// use doipserver_lib::doip::types::LogicalAddress;
+///
+/// let ecu = EcuConfig::default();
+/// let dispatcher = doip::udp_dispatcher(
+///     LogicalAddress::new(0x0001),
+///     &ecu,
+/// );
+/// ```
 pub fn udp_dispatcher(
     logical_addr: LogicalAddress,
     ecu: &crate::config::EcuConfig,

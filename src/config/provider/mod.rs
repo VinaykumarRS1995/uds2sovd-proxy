@@ -8,29 +8,11 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Configuration loading infra
+//! Configuration provider implementations.
 //!
-//! This module provides abstraction and implementations for creating
-//! [`ServerConfig`](super::types::ServerConfig) instances from different sources.
-//!
-//! # Design Rationale
-//!
-//! Configuration loading is separated from configuration usage.
-//! The DoIP server consumes a fully constructed `\[`ServerConfig`]
-//! and remains unaware of where configuration data originated.
-//!
-//! This enables:
-//!
-//! - TOML-based configuration for production deployments
-//! - In-memory configuration for tests
-//! - Future configuration sources (environment variables,
-//!   remote configuration services, etc.)
-//!
-//! # Implementations
-//!
-//! - [`TomlConfigProvider`] loads configuration from TOML files.
-//! - [`DefaultConfigProvider`] provides an in-memory configuration
-//!   primarily intended for testing and examples.
+//! Provides:
+//! - [`DefaultConfigProvider`] for in-memory configuration
+//! - [`TomlConfigProvider`] for TOML-backed configuration
 
 pub mod default_config;
 pub mod toml;

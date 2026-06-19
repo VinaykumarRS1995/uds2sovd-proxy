@@ -8,7 +8,34 @@
 # https://www.apache.org/licenses/LICENSE-2.0
 #
 # SPDX-License-Identifier: Apache-2.0
+#
+# Eclipse OpenSOVD - UDS-to-SOVD DoIP Bridge
+#
+# Workspace Structure:
+# - src/: Core DoIP server library (doipserver-lib) - THE MAIN CRATE
+# - app/: Standalone DoIP server binary (doip-server)
+# - Example/: Diagnostic client for testing (Example binary)
+#
+# Primary Documentation:
+# Run: cargo doc --package doipserver-lib --no-deps --open
+# This opens the main library documentation (architectural overview and all modules).
+# This excludes all external dependency documentation.
+#
+# View all workspace crates (excluding dependencies):
+# Run: cargo doc --no-deps --open
+# This shows doipserver-lib, doip-server, and Example crates only.
 
 [workspace]
-members = ["src", "app", "client"]
+members = ["src", "app", "Example"]
 resolver = "3"
+
+# Metadata for documentation generation and tooling
+[workspace.package]
+authors = ["The Contributors to Eclipse OpenSOVD"]
+license = "Apache-2.0"
+
+[workspace.metadata.docs.rs]
+# Default to the main library for documentation.
+# Primary documentation entry point is doipserver-lib.
+# Use `cargo doc --open` to view the main library documentation.
+default-target = "doipserver-lib"

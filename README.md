@@ -73,6 +73,39 @@ For installation, configuration, execution, troubleshooting, and development wor
 
 ## Documentation
 
+### Code Documentation (Rustdoc)
+
+**Start here**: The core library documentation is the primary API reference.
+
+```sh
+# View the library documentation (main entry point)
+cargo doc-lib
+
+# Or manually:
+cargo doc --package doipserver-lib --no-deps --open
+```
+
+This includes:
+- Architecture overview with design diagrams
+- API reference for all core modules
+- Quick start examples
+- Backend implementation guide
+
+**Additional Resources:**
+
+```sh
+# View the server binary documentation
+cargo doc --package doip-server --no-deps --open
+
+# View the example client
+cargo doc --package doip-example --no-deps --open
+
+# View all workspace crates at once
+cargo doc-all
+```
+
+### Design Documents
+
 | Document | Description |
 | --- | --- |
 | [High level architecture](docs/doip_server_high_level_design_detail.md) | Component architecture diagram |

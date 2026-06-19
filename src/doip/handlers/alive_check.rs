@@ -15,22 +15,18 @@ use crate::doip::{
     types::LogicalAddress,
 };
 
-/// Handles AliveCheckRequest (0x0007, ISO 13400-2 §9.7).
-///
-/// The DoIP client sends this periodically to verify the TCP connection
-/// is still active. Response carries this entity's logical address.
+/// Handles `AliveCheckRequest` messages.
 pub struct AliveCheckHandler {
     logical_address: LogicalAddress,
 }
 
 impl AliveCheckHandler {
+    /// Creates an alive-check handler for the supplied logical address.
     pub fn new(logical_address: LogicalAddress) -> Self {
         Self { logical_address }
     }
 
-    /// Build AliveCheckResponse with this entity's logical address.
-    ///
-    /// Response payload: 2 bytes (logical address in big-endian) per ISO 13400-2 §9.7.
+    /// Builds an `AliveCheckResponse` payload.
     fn respond(&self) -> Response {
         let mut payload = Vec::with_capacity(2);
         payload.extend_from_slice(&self.logical_address.to_be_bytes());
@@ -43,7 +39,6 @@ impl PayloadHandler<TcpPayloadType, TcpRequest> for AliveCheckHandler {
         TcpPayloadType::AliveCheckRequest
     }
     fn handle(&self, tcp_request: TcpRequest) -> Result<Response, Error> {
-        // ISO 13400-2 §9.7: AliveCheckRequest must have empty payload (0 bytes)
         if !tcp_request.payload().is_empty() {
             return Err(Error::UnexpectedPayload {
                 expected: 0,

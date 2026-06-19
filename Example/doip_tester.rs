@@ -8,15 +8,18 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! DoIP tester — exercises the running DoIP server end-to-end.
+//! DoIP Server Example — exercises the running DoIP server end-to-end.
+//!
+//! This binary is one of the 3 crates in the workspace. See the main library documentation
+//! (doipserver-lib) for workspace overview and architecture.
 //!
 //! # Usage
 //! ```sh
 //! # Terminal 1: start the server
-//! cargo run -p doip-server
+//! cargo run --bin doip-server
 //!
 //! # Terminal 2: run the tester
-//! cargo run -p doip-client
+//! cargo run --bin Example
 //! ```
 //!
 

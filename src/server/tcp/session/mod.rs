@@ -38,32 +38,14 @@ use crate::server::tcp::framer::{Frame, Framer};
 
 /// Represents an accepted TCP connection.
 ///
-/// Owns the `ConnectionSlot` (RAII counter decrement on drop). When `run()` completes
-/// the slot is dropped, automatically decrementing the active session counter.
-///
-/// # TODO: Session Lifecycle State Machine (ISO 13400-2 §9.3)
-///
-/// Currently any handler can be called in any state. The correct flow is:
-///
-/// ```text
-/// TCP Connected → RoutingActivationReq → Registered → diagnostics allowed
-///       │                                     │
-///       │ (no activation)                     │ (disconnect / timeout)
-///       ▼                                     ▼
-///    Rejected                               Closed
-/// ```
-///
-/// Required changes:
-/// - Add `SessionState` enum (Connected, Registered, Closed)
-/// - Check state before dispatching: reject 0x8001 if not Registered
-/// - Start `T_TCP_General_Inactivity` timer after routing activation
-/// - Transition to Closed on disconnect or alive check timeout
+/// Owns the `ConnectionSlot`. When `run()` returns, dropping the slot releases
+/// the tracked session capacity.
 pub(super) struct Session {
     slot: ConnectionSlot,
 }
 
 impl Session {
-    /// Create a session that owns the given connection slot.
+    /// Creates a session that owns the given connection slot.
     pub(super) fn new(slot: ConnectionSlot) -> Self {
         Self { slot }
     }
@@ -76,13 +58,13 @@ impl Session {
     /// 2. Feed to framer for frame extraction
     /// 3. Dispatch frames to handlers
     /// 4. Write responses back
-    /// 5. Repeat until EOF, error, or framing failure
+    /// 5. Repeat until EOF or I/O failure
     ///
     /// # Error handling
     ///
     /// - **Framing errors**: NACK sent, session continues for next frame
     /// - **Dispatch errors**: NACK sent to client, session continues
-    /// - **Write errors**: Connection closed (socket is broken)
+    /// - **Write errors**: Session terminates immediately.
     /// - **Read errors**: Connection closed, error logged
     ///
     /// When this function returns, the `ConnectionSlot` is dropped,

@@ -8,32 +8,20 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Configuration data model
+//! Configuration data model.
 //!
-//! This module defines the runtime configuration used by the DoIP server.
-//!
-//! Configuration is grouped into TCP, UDP, and ECU sections.
-//!
-//! Configuration values are deserialized from TOML files via serde and may fall back to compile-time defaults if not specified.
+//! Defines the TCP, UDP, and ECU settings consumed by the server at startup.
 use serde::Deserialize;
 use std::net::SocketAddr;
 
 use super::defaults;
 use crate::doip::types::{Eid, Gid, LogicalAddress, Vin};
 
-/// Top-level server configuration, split into TCP, UDP, and ECU sections.
+/// Complete runtime configuration for the server.
 ///
-/// Private fields
-///
-/// Fields are private and accessed via `into_parts()` to:
-/// - Force explicit destructuring of config sections
-/// - Prevent accidental mixing of TCP/UDP/ECU settings
-/// - Make it obvious in calling code which config section is being used
-///
-/// # Serde behavior
-///
-/// `#[serde(default)]` allows partial TOML files — missing sections use Default.
-/// Users only specify what they want to change from defaults.
+/// The configuration is split into TCP, UDP, and ECU sections.
+/// `#[serde(default)]` allows omitted sections/fields to fall back to
+/// compile-time defaults.
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
@@ -44,23 +32,13 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    /// Consumes the configuration and returns the individual
-    /// transport and ECU configuration sections.
-    ///
-    /// This encourages explicit ownership transfer and makes
-    /// configuration usage visible at the call site.
+    /// Consumes this config and returns `(tcp, udp, ecu)` in that order.
     pub fn into_parts(self) -> (TcpConfig, UdpConfig, EcuConfig) {
         (self.tcp, self.udp, self.ecu)
     }
 }
 
-/// TCP transport configuration.
-///
-/// Controls how the DoIP server accepts and manages
-/// TCP diagnostic connections.
-///
-/// `#[serde(default)]` allows partial TOML files.
-/// Missing fields fall back to compile-time defaults.
+/// TCP transport settings.
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -72,33 +50,28 @@ pub struct TcpConfig {
 }
 
 impl TcpConfig {
-    /// TCP listen address (e.g. `127.0.0.1:13400`).
+    /// Returns the TCP listen address.
     pub fn address(&self) -> SocketAddr {
         self.address
     }
 
-    /// Maximum number of concurrent TCP sessions.
+    /// Returns the maximum number of concurrent TCP sessions.
     pub fn max_connections(&self) -> usize {
         self.max_connections
     }
 
-    /// This entity's DoIP logical address.
+    /// Returns the DoIP logical address used on the TCP path.
     pub fn logical_address(&self) -> LogicalAddress {
         self.logical_address
     }
 
-    /// TCP read buffer size in bytes.
+    /// Returns the TCP read buffer size in bytes.
     pub fn read_buffer_size(&self) -> usize {
         self.read_buffer_size
     }
 }
 
-/// UDP transport configuration.
-///
-/// Controls DoIP vehicle discovery and stateless UDP communication.
-///
-/// `#[serde(default)]` allows partial TOML files.
-/// Missing fields fall back to compile-time defaults.
+/// UDP transport settings.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct UdpConfig {
@@ -107,12 +80,12 @@ pub struct UdpConfig {
 }
 
 impl UdpConfig {
-    /// UDP listen address (e.g. `0.0.0.0:13400`).
+    /// Returns the UDP listen address.
     pub fn address(&self) -> SocketAddr {
         self.address
     }
 
-    /// This entity's DoIP logical address.
+    /// Returns the DoIP logical address used on the UDP path.
     pub fn logical_address(&self) -> LogicalAddress {
         self.logical_address
     }
@@ -138,13 +111,7 @@ impl Default for UdpConfig {
     }
 }
 
-/// ECU identity information advertised by the DoIP entity.
-///
-/// These values are included in vehicle identification
-/// and entity status responses defined by ISO 13400-2.
-///
-/// Note: No `#[serde(default)]` is used because ECU identity
-/// values should be explicitly configured.
+/// ECU identity values advertised in DoIP responses.
 #[derive(Debug, Clone, Deserialize)]
 pub struct EcuConfig {
     vin: Vin,
@@ -153,23 +120,22 @@ pub struct EcuConfig {
 }
 
 impl EcuConfig {
-    /// Create a new ECU config from the given identity fields.
+    /// Creates ECU identity settings from VIN, EID, and GID values.
     pub fn new(vin: Vin, eid: Eid, gid: Gid) -> Self {
         Self { vin, eid, gid }
     }
-    /// Returns the configured Vehicle Identification Number (VIN).
-    ///
-    /// VIN is a 17-character vehicle identifier defined by ISO 3779.    
+
+    /// Returns the configured VIN.
     pub fn vin(&self) -> Vin {
         self.vin
     }
-    /// Entity Identifier (6 bytes, typically MAC address).
+
+    /// Returns the configured EID.
     pub fn eid(&self) -> Eid {
         self.eid
     }
-    /// Returns the configured Group Identifier (GID).
-    ///
-    /// GID identifies a logical group of DoIP entities.
+
+    /// Returns the configured GID.
     pub fn gid(&self) -> Gid {
         self.gid
     }

@@ -10,14 +10,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 [package]
-name        = "doip-client"
+name        = "doip-example"
 version     = "0.1.0"
 edition     = "2024"
 rust-version = "1.85"
 description = "DoIP tester client — exercises the running DoIP server end-to-end"
 
 [[bin]]
-name = "doip-client"
+name = "Example"
 path = "doip_tester.rs"
 
 [dependencies]

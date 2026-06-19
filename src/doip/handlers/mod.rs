@@ -8,7 +8,36 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Payload handlers — one per DoIP message type.
+//! Public DoIP payload handlers.
+//!
+//! Handlers process incoming DoIP requests and produce responses. Each handler
+//! implements the [`crate::doip::PayloadHandler`] trait for a specific payload type.
+//!
+//! # Built-in Handlers
+//!
+//! - [`AliveCheckHandler`]: Responds to alive check requests to verify connectivity
+//! - [`RoutingActivationHandler`]: Manages client registration and session lifecycle
+//! - [`DiagnosticsHandler`]: Routes UDS diagnostic requests to the backend proxy
+//! - [`IdentifyVehicleHandler`]: General vehicle identification for UDP
+//! - [`IdentifyVehicleByVinHandler`]: VIN-based vehicle identification
+//! - [`IdentifyVehicleByEidHandler`]: EID-based vehicle identification
+//! - [`EntityStatusHandler`]: Reports server status and session limits
+//!
+//! # Extension
+//!
+//! Implement the [`crate::doip::PayloadHandler`] trait to add custom message handling:
+//!
+//! ```ignore
+//! use doipserver_lib::doip::{PayloadHandler, Response};
+//! use doipserver_lib::doip::types::LogicalAddress;
+//!
+//! struct MyHandler;
+//!
+//! impl PayloadHandler<MyPayloadType, MyRequestType> for MyHandler {
+//!     fn payload_type(&self) -> MyPayloadType { /* ... */ }
+//!     fn handle(&self, req: MyRequestType) -> Result<Response, Error> { /* ... */ }
+//! }
+//! ```
 
 pub mod alive_check;
 pub mod diagnostics;

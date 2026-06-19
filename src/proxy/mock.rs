@@ -10,8 +10,7 @@
 
 use super::{SovdProxy, SovdProxyError};
 
-/// Loopback proxy — echoes the UDS request bytes as the response.
-/// Used in tests only; not intended for production.
+/// Test-only [`SovdProxy`] implementation that echoes the request bytes.
 pub struct MockProxy;
 
 impl SovdProxy for MockProxy {

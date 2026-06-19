@@ -15,29 +15,17 @@ use crate::doip::{
     message::{Response, UdpPayloadType, UdpRequest},
 };
 
-// DoipEntityStatusRequest (0x4001)
-
-/// Handles DoipEntityStatusRequest (0x4001, ISO 13400-2 §7.6.3).
-///
-/// Reports server capacity to diagnostic clients: node type, connection limits,
-/// and maximum diagnostic message size.
+/// Handles `DoipEntityStatusRequest` messages.
 pub struct EntityStatusHandler {
-    /// Maximum concurrent TCP connections supported by this server.
-    ///
-    /// This is a configuration value, not a compile-time constant. Different
-    /// deployments have different capacity (e.g., embedded ECU: 2 connections,
-    /// desktop proxy: 50 connections).
-    ///
-    /// Per ISO 13400-2 §7.6.3, this value must be sent in every response
-    /// to inform diagnostic clients of server capacity.
+    /// Maximum concurrent TCP connections reported in the response.
     max_connections: u8,
 
-    /// Maximum DoIP message size accepted by this server.
-    // TODO: Derive from config instead of hardcoding at registration.
+    /// Maximum DoIP data size reported in the response.
     max_data_size: u32,
 }
 
 impl EntityStatusHandler {
+    /// Creates an entity-status handler with the reported capacity values.
     pub fn new(max_connections: u8, max_data_size: u32) -> Self {
         Self {
             max_connections,
@@ -51,11 +39,6 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for EntityStatusHandler {
         UdpPayloadType::DoipEntityStatusRequest
     }
 
-    /// Response payload (7 bytes):
-    /// \[0\]     node type (0x01 = DoIP node)
-    /// \[1\]     max concurrent TCP sockets
-    /// \[2\]     currently open TCP sockets (0 — not tracked at this level)
-    /// \[3..7\]  max data size (u32 big-endian)
     fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
         if !udp_request.payload().is_empty() {
             return Err(Error::UnexpectedPayload {
@@ -66,7 +49,7 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for EntityStatusHandler {
         let mut payload = Vec::with_capacity(ENTITY_STATUS_RESPONSE_LEN);
         payload.push(DOIP_NODE_TYPE);
         payload.push(self.max_connections);
-        payload.push(0x00); // current sessions — not tracked at this level
+        payload.push(0x00);
         payload.extend_from_slice(&self.max_data_size.to_be_bytes());
         Ok(Response::new(
             UdpPayloadType::DoipEntityStatusResponse as u16,

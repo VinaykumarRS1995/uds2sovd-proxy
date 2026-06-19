@@ -8,95 +8,60 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! # uds2sovd — DoIP Server Library
+#![doc = include_str!("../docs/doip_server_high_level_design_detail.md")]
+
+//! # DoIP Server Library
 //!
-//! A DoIP (Diagnostics over Internet Protocol) server library.
-//! This crate provides a transport bridge between DoIP clients and an SOVD (Service-Oriented Vehicle Diagnostics) backend.
+//! Implements ISO 13400-2 Diagnostics over Internet Protocol (DoIP) as a bridge
+//! between UDS (Unified Diagnostic Services) and SOVD backends.
 //!
-//! ## What this library offers
+//! This library provides the core protocol implementation. For ready-to-use applications, see:
+//! - **[doip-server](https://docs.rs/crate/doip-server) binary**: Standalone server
+//! - **Example client**: Test client for development
 //!
-//! ## Crate Layout
+//! # Quick Start
 //!
-//! | Module       | Responsibility|
-//! |--------------|----------------|
-//! | [`config`]    | Configuration structs and providers |
-//! | [`doip`]      | DoIP protocol handling (message parsing, serialization, etc.)|
-//! | [`error`]       | Error types and handling utilities |
-//! | [`proxy`]      | The `SovdProxy` trait and related types for interfacing with the SOVD backend |
-//! | [`server`]     | The main server implementation, including the dispatcher and message handlers |
+//! ```no_run
+//! use doipserver_lib::{config, doip, proxy};
+//! use std::sync::Arc;
 //!
-//! ##  Request Flow
-//!
-//! ```text
-//! How these layers fit together
-//!
-//!         Tester ( doipclient)
-//!       │ TCP :13400                │ UDP :13400
-//!       ▼                           ▼
-//!  TcpTransport               UdpTransport
-//!       │                           │
-//!       └──────────────┬────────────┘
-//!                      ▼
-//!           Dispatcher<PayloadType> // This dispatcher routes messages to protocol-specific
-//!                      |               handlers based on the DoIP message type
-//!                      │
-//!           Message Handlers (×8)
-//!                      │
-//!             SovdProxy (trait)
-//!                      │
-//!         ┌────────────┴────────────┐
-//!      StubProxy              RealSovdProxy
-//!      (NRC 0x11)             (SOVD REST API)
-//!        current                future
+//! let cfg = config::DefaultConfigProvider::new().load()?;
+//! let tcp = doip::tcp_dispatcher(cfg.logical_address, Arc::new(proxy::StubProxy));
+//! let udp = doip::udp_dispatcher(cfg.logical_address, &cfg.ecu);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
-//! ## How to use
 //!
-//! 1. Implement the SovdProxy trait for your SOVD backend.
-//! 2. Create a config (TOML file or in-memory).
-//! 3. Build the server and run it.
+//! # Core Modules
 //!
-//! ## Public API
+//! - [`config`]: Configuration loading from defaults or TOML files
+//! - [`doip`]: Protocol types, dispatchers, and message handling
+//! - [`server`]: TCP and UDP transport runtimes
+//! - [`proxy`]: Backend diagnostic interface and implementations
+//! - [`error`]: Application-level error aggregation
 //!
-//! Only six types are publicly exported. Everything else is `pub(crate)` or private.
+//! # Implementing a Backend
 //!
-//! | Type | What it is |
-//! |------|------------|
-//! | [`server`] | starts and runs the DoIP server, manages TCP and UDP transports, and handles shutdown |
-//! | `ServerConfig` | Configuration for the DoIP server |
-//! | `ConfigProvider` | Trait for loading configuration from various sources (TOML, environment variables, etc.) |
-//! | `DefaultConfigProvider` | A simple ConfigProvider that takes a ServerConfig directly (useful for testing) |
-//! | `TomlConfigProvider` | A ConfigProvider that loads configuration from a TOML file |
-//! | `SovdProxy` | Trait that defines the interface for forwarding UDS requests to an SOVD backend and returning responses |
+//! Implement the [`proxy::SovdProxy`] trait to connect your diagnostic system:
 //!
+//! ```ignore
+//! use doipserver_lib::proxy::SovdProxy;
 //!
-//! ## System Boundaries
-//! This crate is Responsible for:
-//! - TCP and UDP DoIP communication
-//! - Parsing and serializing DoIP messages
-//! - Routing DoIP requests to handlers
-//! - Managing transport-level sessions
-//! - Forwarding UDS payloads through SovdProxy
+//! pub struct MyBackend;
 //!
-//! This crate is not Responsible for:
-//! - UDS service execution
-//! - Diagnostic business logic
-//! - Security access algorithms
+//! impl SovdProxy for MyBackend {
+//!     fn process(&self, uds_request: &[u8]) -> Result<Vec<u8>, _> {
+//!         // Forward UDS request to your diagnostic backend
+//!         // Return the response bytes
+//!     }
+//! }
+//! ```
 //!
-//!  ## Current Status
+//! # Learn More
 //!
-//! Implemented
-//! - TCP DoIP Transport with basic message parsing and handling
-//! - UDP Vechicle Discovery with basic request handling
-//! - Message dispatching based on DoIP message types
-//! - Diagnostic message forwarding to a StubProxy that returns NRC 0x11 (Service Not Supported) for all requests
-//!
-//! Future Work
-//! - Full routing activation state machine implementation
-//! - Producation SOVD backend integration (e.g., REST API client)
-//! - Additional protocol validation
-//!  
-//! See `app/main.rs` for a working example and `app/sample-doip-server.toml` for
-//! a reference configuration
+//! - **API Documentation**: Explore modules and types above
+//! - **Architecture**: See embedded design documentation below
+//! - **Running the Server**: See [doip-server](https://docs.rs/crate/doip-server) crate docs
+//! - **Testing**: See Example crate documentation
 
 pub mod config;
 pub mod doip;

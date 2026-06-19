@@ -8,7 +8,7 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! TCP transport — accept loop, session management, and byte-stream framing.
+//! TCP transport runtime.
 
 mod framer;
 mod session;
@@ -25,15 +25,13 @@ use crate::doip::TcpDispatcher;
 use crate::doip::message::{DoipNackCode, Response};
 use session::{Session, SessionManager};
 
-/// TCP transport: binds a listener and spawns one session per accepted connection.
+/// TCP transport implementation.
 ///
-/// # Current responsibility (mixed for simplicity):
-/// - Transport: bind, accept, spawn sessions
-/// - Protocol: session limit enforcement, NACK on rejection
+/// Accepts connections, enforces the configured session limit, and dispatches
+/// framed DoIP messages to the TCP dispatcher.
 ///
-/// # Future improvement: Separation of concerns
-/// Extract protocol logic into a separate handler layer if we support
-/// multiple protocols over TCP. .
+/// When the session limit is reached, the transport sends a Generic Header
+/// NACK with [`DoipNackCode::OutOfMemory`] and then closes the connection.
 pub struct Tcp {
     config: TcpConfig,
     manager: SessionManager,
@@ -41,7 +39,7 @@ pub struct Tcp {
 }
 
 impl Tcp {
-    /// Create a TCP transport with the given config and dispatcher.
+    /// Creates a TCP transport from the provided configuration and dispatcher.
     pub fn new(config: TcpConfig, dispatcher: TcpDispatcher) -> Self {
         let manager = SessionManager::new(config.max_connections());
         Self {
@@ -53,6 +51,13 @@ impl Tcp {
 }
 
 impl Transport for Tcp {
+    /// Binds the configured TCP address and runs the accept loop.
+    ///
+    /// Most accept/session errors are logged and the loop continues.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::Error`] if the listener cannot be bound.
     async fn start(&self) -> Result<(), io::Error> {
         let listener = TcpListener::bind(self.config.address()).await?;
         tracing::info!(address = %self.config.address(), "TCP server listening");
@@ -69,7 +74,7 @@ impl Transport for Tcp {
                             session.run(stream, dispatcher, buf_size).await;
                         });
                     }
-                    //NACK is sent per ISO 13400-2 §7.6.1 if the server is at max capacity. The connection is then dropped without a response.
+                    // Server is at capacity: send OutOfMemory NACK, then close.
                     None => {
                         tracing::warn!(peer = %peer_addr, "connection rejected: max sessions reached");
                         let nack = Response::doip_header_nack(DoipNackCode::OutOfMemory);

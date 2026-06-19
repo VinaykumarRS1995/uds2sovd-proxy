@@ -8,9 +8,11 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
+//! DoIP message and payload types.
+
 use crate::doip::constants::{INVERSE_VERSION, PROTOCOL_VERSION};
 
-/// Generic DoIP header NACK codes (ISO 13400-2 §9.4, Table 18).
+/// Generic DoIP header NACK codes (ISO 13400-2  9.4, Table 18).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum DoipNackCode {
@@ -32,17 +34,12 @@ impl From<DoipNackCode> for u8 {
     }
 }
 
-// Connection identity
-
 /// Unique identifier for a TCP session, assigned at connection accept time.
-///
-/// Distinct from DoIP logical address, which is negotiated during routing
-/// activation and used for message routing within the diagnostic protocol.
 #[derive(Debug)]
 pub struct ConnectionId(uuid::Uuid);
 
 impl ConnectionId {
-    /// Generate a new random connection ID.
+    /// Generates a new random connection identifier.
     pub fn new() -> Self {
         Self(uuid::Uuid::new_v4())
     }
@@ -60,25 +57,36 @@ impl std::fmt::Display for ConnectionId {
     }
 }
 
-// Payload types
-
-/// Payload types valid on TCP connections (ISO 13400-2).
-/// Compile-time type-safe: a UdpPayloadType value cannot be assigned here.
+/// DoIP payload types valid on TCP connections.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u16)]
 pub enum TcpPayloadType {
+    /// Generic DoIP header NACK.
     GenericDoipHeaderNack = 0x0000,
+    /// Routing activation request.
     RoutingActivationRequest = 0x0005,
+    /// Routing activation response.
     RoutingActivationResponse = 0x0006,
+    /// Alive check request.
     AliveCheckRequest = 0x0007,
+    /// Alive check response.
     AliveCheckResponse = 0x0008,
+    /// Diagnostic message request.
     DiagnosticMessage = 0x8001,
+    /// Diagnostic message positive acknowledgment.
     DiagnosticMessagePositiveAck = 0x8002,
+    /// Diagnostic message negative acknowledgment.
     DiagnosticMessageNegativeAck = 0x8003,
 }
 
 impl TryFrom<u16> for TcpPayloadType {
     type Error = u16;
+
+    /// Converts a raw payload type into a TCP payload enum variant.
+    ///
+    /// # Errors
+    ///
+    /// Returns the original value if it is not a supported TCP payload type.
     fn try_from(v: u16) -> Result<Self, Self::Error> {
         match v {
             0x0000 => Ok(Self::GenericDoipHeaderNack),
@@ -94,22 +102,34 @@ impl TryFrom<u16> for TcpPayloadType {
     }
 }
 
-/// Payload types valid on UDP (ISO 13400-2).
-/// Compile-time type-safe: a TcpPayloadType value cannot be assigned here.
+/// DoIP payload types valid on UDP.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u16)]
 pub enum UdpPayloadType {
+    /// Generic DoIP header NACK.
     GenericDoipHeaderNack = 0x0000,
+    /// Vehicle-identification request.
     VehicleIdentificationRequest = 0x0001,
+    /// Vehicle-identification request filtered by EID.
     VehicleIdentificationRequestWithEid = 0x0002,
+    /// Vehicle-identification request filtered by VIN.
     VehicleIdentificationRequestWithVin = 0x0003,
+    /// Vehicle announcement response.
     VehicleAnnouncementResponse = 0x0004,
+    /// Entity-status request.
     DoipEntityStatusRequest = 0x4001,
+    /// Entity-status response.
     DoipEntityStatusResponse = 0x4002,
 }
 
 impl TryFrom<u16> for UdpPayloadType {
     type Error = u16;
+
+    /// Converts a raw payload type into a UDP payload enum variant.
+    ///
+    /// # Errors
+    ///
+    /// Returns the original value if it is not a supported UDP payload type.
     fn try_from(v: u16) -> Result<Self, Self::Error> {
         match v {
             0x0000 => Ok(Self::GenericDoipHeaderNack),
@@ -124,11 +144,7 @@ impl TryFrom<u16> for UdpPayloadType {
     }
 }
 
-// Transport-typed requests
-
-/// A request arriving over a TCP connection.
-/// The payload type is compile-time restricted to [`TcpPayloadType`] values.
-// TODO: Consider unifying TcpRequest/UdpRequest into a generic Request<P>.
+/// DoIP request received over TCP.
 #[derive(Debug)]
 pub struct TcpRequest {
     payload_type: TcpPayloadType,
@@ -136,7 +152,7 @@ pub struct TcpRequest {
 }
 
 impl TcpRequest {
-    /// Create a TCP request from a validated payload type and raw bytes.
+    /// Creates a TCP request from a payload type and payload bytes.
     pub fn new(payload_type: TcpPayloadType, payload: Vec<u8>) -> Self {
         Self {
             payload_type,
@@ -144,21 +160,20 @@ impl TcpRequest {
         }
     }
 
-    /// The raw payload bytes (no DoIP header).
+    /// Returns the payload bytes without the DoIP header.
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
 }
 
-/// A request arriving over UDP.
-/// The payload type is compile-time restricted to [`UdpPayloadType`] values.
+/// DoIP request received over UDP.
 pub struct UdpRequest {
     payload_type: UdpPayloadType,
     payload: Vec<u8>,
 }
 
 impl UdpRequest {
-    /// Create a UDP request from a validated payload type and raw bytes.
+    /// Creates a UDP request from a payload type and payload bytes.
     pub fn new(payload_type: UdpPayloadType, payload: Vec<u8>) -> Self {
         Self {
             payload_type,
@@ -166,17 +181,15 @@ impl UdpRequest {
         }
     }
 
-    /// The raw payload bytes (no DoIP header).
+    /// Returns the payload bytes without the DoIP header.
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
 }
 
-// Response
-
-/// DoIP response: payload type + payload bytes.
-/// Transport-agnostic — the same struct is used for TCP writes and UDP sends.
-/// Call `to_bytes()` to get the full on-wire representation including the 8-byte header.
+/// DoIP response payload and payload type.
+///
+/// The same type is used for TCP and UDP responses.
 #[derive(Debug)]
 pub struct Response {
     payload_type: u16,
@@ -184,7 +197,7 @@ pub struct Response {
 }
 
 impl Response {
-    /// Create a response with a raw payload type and payload bytes.
+    /// Creates a response from a numeric payload type and payload bytes.
     pub fn new(payload_type: u16, payload: Vec<u8>) -> Self {
         Self {
             payload_type,
@@ -192,25 +205,29 @@ impl Response {
         }
     }
 
-    /// Build a GenericDoipHeaderNack response (ISO 13400-2 §9.4).
-    /// NACK codes: 0x00=incorrect pattern, 0x01=unknown payload type,
-    /// 0x02=message too large, 0x03=out of memory, 0x04=invalid payload length.
-    ///
+    /// Creates a Generic DoIP Header NACK response.
     pub fn doip_header_nack(code: DoipNackCode) -> Self {
         Self::new(0x0000, vec![u8::from(code)])
     }
 
-    /// The numeric payload type for this response.
+    /// Returns the numeric payload type for this response.
     pub fn payload_type(&self) -> u16 {
         self.payload_type
     }
 
-    /// The raw payload bytes.
+    /// Returns the payload bytes without the DoIP header.
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
 
-    /// Serialise into on-wire bytes: 8-byte DoIP generic header + payload.
+    /// Serializes the response into DoIP wire format.
+    ///
+    /// Encoding layout:
+    /// - byte 0: protocol version (`0xFD`)
+    /// - byte 1: inverse protocol version (`0x02`)
+    /// - bytes 2..4: payload type (`u16`, big-endian)
+    /// - bytes 4..8: payload length (`u32`, big-endian)
+    /// - bytes 8..: payload bytes
     pub fn to_bytes(&self) -> Vec<u8> {
         let len = self.payload().len() as u32;
         let mut buf = Vec::with_capacity(crate::doip::constants::HEADER_LEN + self.payload().len());
@@ -223,11 +240,9 @@ impl Response {
     }
 }
 
-// Payload-type extraction
-
-/// Implemented by request types so the generic `Dispatcher` can extract the
-/// payload type without knowing the concrete request type.
+/// Extracts the payload type from a request.
 pub trait HasPayloadType<PayloadType> {
+    /// Returns the request payload type.
     fn payload_type(&self) -> PayloadType;
 }
 
@@ -243,7 +258,6 @@ impl HasPayloadType<UdpPayloadType> for UdpRequest {
     }
 }
 
-/// Infallible conversion — every enum variant has a defined `u16` value.
 impl From<TcpPayloadType> for u16 {
     fn from(payload_type: TcpPayloadType) -> Self {
         payload_type as u16

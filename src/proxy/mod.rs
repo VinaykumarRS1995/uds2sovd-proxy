@@ -8,6 +8,8 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
+//! Backend proxy traits and implementations.
+
 pub mod error;
 #[cfg(test)]
 pub mod mock;
@@ -15,34 +17,17 @@ pub mod stub;
 
 pub use error::SovdProxyError;
 
-/// Translates raw UDS request bytes into raw UDS response bytes by forwarding
-/// the request to the SOVD diagnostic system.
+/// Processes a raw UDS request and returns a raw UDS response.
 ///
-/// # Contract
+/// The input and output contain UDS payload bytes only and do not include DoIP
+/// framing.
 ///
-/// - `uds_request` contains only UDS service-layer bytes — no DoIP framing.
-/// - On success the returned `Vec<u8>` is the raw UDS response from SOVD.
-/// - On failure a [`SovdProxyError`] describes why the proxy could not produce
-///   a response.
-///
-/// # Implementations
-///
-/// | Type | Purpose |
-/// |  |   |
-/// | [`stub::StubProxy`] | Returns NRC 0x11 (serviceNotSupported). Use until the real SOVD backend is ready. |
-/// | `MockProxy` (test-only) | Loopback — echoes the request. Used in unit/integration tests. |
-///
-/// The real implementation (provided separately) will forward requests to a
-/// SOVD server over the vehicle network.
-///
-/// # TODO
-///
-/// When the real SOVD backend is wired:
-/// - Make `process()` async to avoid blocking the Tokio runtime.
-///   This cascades into `PayloadHandler::handle()` and `Dispatcher::dispatch()`.
-/// - Add a configurable timeout to prevent a hung backend from exhausting
-///   TCP session slots.
-/// - Expand [`SovdProxyError`] with `Timeout`, `ConnectionFailed`, `HttpError` variants.
+/// This trait is synchronous; callers invoke it from the transport handler path.
 pub trait SovdProxy: Send + Sync {
+    /// Processes a UDS request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SovdProxyError`] if a response cannot be produced.
     fn process(&self, uds_request: &[u8]) -> Result<Vec<u8>, SovdProxyError>;
 }

@@ -1,3 +1,5 @@
+//! UDP datagram parsing and dispatch.
+
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
 //
@@ -16,24 +18,25 @@ use crate::doip::header::DoipHeader;
 use crate::doip::message::{Response, UdpPayloadType, UdpRequest};
 
 /// Parses and dispatches a single UDP DoIP datagram.
-///
-/// UDP is datagram-based — each `recv_from` call yields one complete message,
 pub(crate) struct Handler {
     dispatcher: Arc<UdpDispatcher>,
 }
 
 impl Handler {
+    /// Creates a UDP datagram handler backed by the given dispatcher.
     pub(crate) fn new(dispatcher: Arc<UdpDispatcher>) -> Self {
         Self { dispatcher }
     }
 
-    /// Parse one UDP datagram and dispatch it to the registered handler.
+    /// Parses one UDP datagram and dispatches it to the registered handler.
+    ///
+    /// The datagram must contain exactly one complete DoIP frame:
+    /// - at least an 8-byte generic header,
+    /// - a payload length that matches the datagram body exactly,
+    /// - and a payload type valid for UDP.
     ///
     /// Returns the response to send back, or an error if the datagram is malformed
-    /// or the payload type is unrecognised.
-    ///
-    /// Unlike TCP , UDP is datagram-based
-    /// each call to handle() processes exactly one complete message.
+    /// or the payload type is unrecognized.
     pub(crate) fn handle(&self, data: &[u8]) -> Result<Response, Error> {
         if data.len() < HEADER_LEN {
             return Err(Error::InvalidPayloadLength {

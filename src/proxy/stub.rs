@@ -10,11 +10,7 @@
 
 use super::{SovdProxy, SovdProxyError};
 
-/// Stub proxy — returns UDS Negative Response Code 0x11 (serviceNotSupported)
-/// for every request.
-///
-/// Replace with the real [`SovdProxy`] implementation once the SOVD backend
-/// integration layer is available.
+/// [`SovdProxy`] implementation that returns UDS NRC `0x11` for every request.
 pub struct StubProxy;
 
 impl SovdProxy for StubProxy {

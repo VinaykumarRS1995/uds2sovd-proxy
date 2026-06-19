@@ -8,7 +8,7 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! Handler for VehicleIdentificationRequest (0x0001, ISO 13400-2 §7.6.1).
+//! Handler for general vehicle-identification requests.
 
 use super::utils::create_vi_response;
 use crate::config::EcuConfig;
@@ -19,13 +19,14 @@ use crate::doip::{
     types::LogicalAddress,
 };
 
-/// Handles 0x0001 — responds to any client unconditionally.
+/// Handles `VehicleIdentificationRequest` messages.
 pub struct IdentifyVehicleHandler {
     ecu_config: EcuConfig,
     logical_address: LogicalAddress,
 }
 
 impl IdentifyVehicleHandler {
+    /// Creates a handler from ECU identity values and the server logical address.
     pub fn new(ecu_config: EcuConfig, logical_address: LogicalAddress) -> Self {
         Self {
             ecu_config,
@@ -39,8 +40,6 @@ impl PayloadHandler<UdpPayloadType, UdpRequest> for IdentifyVehicleHandler {
         UdpPayloadType::VehicleIdentificationRequest
     }
 
-    /// ISO 13400-2 requires an empty payload for 0x0001.
-    /// Any non-empty payload is rejected as malformed.    
     fn handle(&self, udp_request: UdpRequest) -> Result<Response, Error> {
         if !udp_request.payload().is_empty() {
             return Err(Error::UnexpectedPayload {

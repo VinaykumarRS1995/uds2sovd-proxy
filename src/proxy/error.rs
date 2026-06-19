@@ -8,8 +8,12 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
+//! Errors returned by [`SovdProxy`](super::SovdProxy) implementations.
+
+/// Errors reported by a [`SovdProxy`](super::SovdProxy).
 #[derive(Debug, thiserror::Error)]
 pub enum SovdProxyError {
+    /// Returned when the backend response cannot be interpreted as valid UDS bytes.
     #[error("SOVD returned an invalid UDS response")]
     InvalidResponse,
 }

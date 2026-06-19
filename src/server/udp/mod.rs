@@ -8,7 +8,10 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! UDP transport — recv loop for DoIP discovery and entity status messages.
+//! UDP transport runtime.
+//!
+//! Handles incoming datagrams, dispatches them through registered handlers,
+//! and sends responses back to the sender.
 
 pub mod handler;
 
@@ -24,14 +27,22 @@ use crate::doip::constants::UDP_RECV_BUF_SIZE;
 use crate::doip::error::Error;
 use handler::Handler;
 
-/// UDP transport: binds a socket and dispatches one datagram at a time.
+/// UDP transport implementation.
+///
+/// Receives datagrams, dispatches them through the UDP dispatcher, and sends
+/// any generated response back to the sender.
+///
+/// Runtime behavior per datagram:
+/// - Successful dispatch: send handler response.
+/// - [`Error::EIDNotMatched`] or [`Error::VinNotMatched`]: send no response.
+/// - Other dispatch/parsing errors: send Generic Header NACK.
 pub struct Udp {
     config: UdpConfig,
     handler: Handler,
 }
 
 impl Udp {
-    /// Create a UDP transport with the given config and dispatcher.
+    /// Creates a UDP transport from the provided configuration and dispatcher.
     pub fn new(config: UdpConfig, dispatcher: UdpDispatcher) -> Self {
         Self {
             config,
@@ -41,6 +52,13 @@ impl Udp {
 }
 
 impl Transport for Udp {
+    /// Binds the configured UDP address and runs the receive loop.
+    ///
+    /// Most receive/send/dispatch errors are logged and the loop continues.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::Error`] if the UDP socket cannot be bound.
     async fn start(&self) -> Result<(), io::Error> {
         let socket = UdpSocket::bind(self.config.address()).await?;
         tracing::info!(address = %self.config.address(), "UDP server listening");
@@ -55,7 +73,7 @@ impl Transport for Udp {
                                 tracing::error!(error = %err, peer = %src_addr, "UDP send error");
                             }
                         }
-                        //ISO 13400-2 §7.6.1 : non-matching EID/VIN -> no response
+                        // Non-matching EID/VIN request: intentionally no response.
                         Err(Error::EIDNotMatched) | Err(Error::VinNotMatched) => {
                             tracing::debug!(peer = %src_addr, "no matching entity, not responding");
                         }

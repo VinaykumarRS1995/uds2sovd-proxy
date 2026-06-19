@@ -12,34 +12,18 @@
 //!
 //! This provider wraps an already constructed [`ServerConfig`] and
 //! returns it on every call to [`ConfigProvider::load`].
-//!
-//! Unlike [`TomlConfigProvider`](super::toml::TomlConfigProvider),
-//! this provider performs no file I/O and does not involve parsing or validation logic.
-//!
+//! It performs no file I/O.
 
 use super::super::{ConfigError, ConfigProvider};
 use crate::config::types::ServerConfig;
 
-/// A [`ConfigProvider`] implementation backed by an default_config instance
-/// [`ServerConfig`].
-///
-/// This provider is primarily intended for testing, examples,
-/// and applications that construct configuration programmatically.
-///
-/// # Design Rationale
-///
-/// The configuration loading abstraction allows the server
-/// to remain independent of configuration sources.
-///
-/// `DefaultConfigProvider` exists to support testing and
-/// dependency injection without requiring file-system access.
+/// [`ConfigProvider`] backed by a stored [`ServerConfig`].
 pub struct DefaultConfigProvider {
     config: ServerConfig,
 }
 
 impl DefaultConfigProvider {
-    /// Creates a provider that always returns the supplied
-    /// configuration instance.    
+    /// Creates a provider that always returns the supplied configuration.
     pub fn new(config: ServerConfig) -> Self {
         Self { config }
     }
@@ -48,10 +32,8 @@ impl DefaultConfigProvider {
 impl ConfigProvider for DefaultConfigProvider {
     /// Returns a clone of the stored configuration.
     ///
-    /// This operation cannot fail because the configuration
-    /// has already been constructed and validated.
+    /// This operation is infallible because it performs no I/O and no parsing.
     fn load(&self) -> Result<ServerConfig, ConfigError> {
-        // Default config is always valid, so this never fails
         Ok(self.config.clone())
     }
 }

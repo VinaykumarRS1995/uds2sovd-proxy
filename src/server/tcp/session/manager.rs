@@ -14,20 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use super::slot::ConnectionSlot;
 use crate::doip::message::ConnectionId;
 
-/// Tracks active TCP sessions and enforces configured connection limit.
-///
-/// # Architecture
-///
-/// Uses atomic counter shared with `ConnectionSlot` via `Arc`. When a slot
-/// is dropped (session ends for any reason), the counter auto-decrements.
-/// No polling, no background tasks, no explicit `remove()` calls needed.
-///
-/// # Design choice: Arc-shared counter
-///
-/// `ConnectionSlot` holds `Arc<AtomicUsize>` (shared ownership of the counter)
-/// rather than `Arc<SessionManager>` to keep the slot lightweight.
-/// The slot only needs the counter to decrement on drop — it doesn't
-/// need access to `max` or any other manager state.
+/// Tracks active TCP sessions and enforces the configured connection limit.
 pub(in crate::server::tcp) struct SessionManager {
     max: usize,
     active: Arc<AtomicUsize>,
