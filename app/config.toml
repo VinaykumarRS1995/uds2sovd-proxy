@@ -9,8 +9,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# Sample DoIP Server Configuration
-# Usage: cargo run -p doip-server -- sample-doip-server.toml
+# Sample Configuration
+# Usage: cargo run -p uds2sovd-proxy -- config.toml
 
 [tcp]
 # TCP listener bind address and port (ISO 13400-2 default: 13400)
@@ -34,8 +34,8 @@ logical_address = 1
 # Below represents VIN "00000000000000000"
 vin = [48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48]
 # Entity Identifier — 6 bytes, typically the MAC address of the DoIP interface
-# Example: MAC 00:00:00:00:00:00
+# example: MAC 00:00:00:00:00:00
 eid = [0, 0, 0, 0, 0, 0]
 # Group Identifier — 6 bytes, groups DoIP entities on the same subnet
-# Example: GID 00:00:00:00:00:00
+# example: GID 00:00:00:00:00:00
 gid = [0, 0, 0, 0, 0, 0]

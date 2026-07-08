@@ -8,33 +8,30 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-
-//! DoIP server application.
+//! UDS-to-SOVD Proxy application.
 //!
-//! Standalone server binary that runs the DoIP protocol using the library.
+//! Standalone binary that runs the UDS-to-SOVD proxy.
 //!
 //! # Running
 //!
 //! ```sh
 //! # With default configuration
-//! cargo run --bin doip-server
+//! cargo run --bin uds2sovd-proxy
 //!
 //! # With custom TOML configuration
-//! cargo run --bin doip-server -- /path/to/config.toml
+//! cargo run --bin uds2sovd-proxy -- /path/to/config.toml
 //! ```
 //!
 //! # Configuration
 //!
 //! Server loads configuration in this order (first match wins):
-//! 1. CLI argument: `doip-server <path/to/config.toml>`
+//! 1. CLI argument: `uds2sovd-proxy <path/to/config.toml>`
 //! 2. Default built-in configuration from [`config::DefaultConfigProvider`]
-//!
-//! For configuration schema, see `docs/doip_server_usage.md`.
 //!
 //! # See Also
 //!
-//! - Main library: [uds2sovd crate](https://docs.rs/uds2sovd) for API details
-//! - Example client: `cargo run --bin Example` for testing      
+//! - Main library: [uds2sovd_proxy_lib](../uds2sovd_proxy_lib/index.html) for API details
+//! - example client: `cargo run --bin example` for testing
 use std::sync::Arc;
 use uds2sovd::{config, doip, error, proxy, server};
 
