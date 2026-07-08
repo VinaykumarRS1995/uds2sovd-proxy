@@ -36,30 +36,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 name = "doip-example"
 version = "0.1.0"
 dependencies = [
- "doipserver-lib",
-]
-
-[[package]]
-name = "doip-server"
-version = "0.1.0"
-dependencies = [
- "doipserver-lib",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "doipserver-lib"
-version = "0.1.0"
-dependencies = [
- "serde",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
- "uuid",
+ "uds2sovd-proxy-lib",
 ]
 
 [[package]]
@@ -542,6 +519,29 @@ dependencies = [
  "thread_local",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "uds2sovd-proxy"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uds2sovd-proxy-lib",
+]
+
+[[package]]
+name = "uds2sovd-proxy-lib"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

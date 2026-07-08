@@ -12,21 +12,21 @@
 # Eclipse OpenSOVD - UDS-to-SOVD DoIP Bridge
 #
 # Workspace Structure:
-# - src/: Core DoIP server library (doipserver-lib) - THE MAIN CRATE
-# - app/: Standalone DoIP server binary (doip-server)
-# - Example/: Diagnostic client for testing (Example binary)
+# - src/: Core DoIP server library (uds2sovd-proxy-lib) - THE MAIN CRATE
+# - app/: Standalone DoIP server binary (uds2sovd-proxy)
+# - example/: Diagnostic client for testing (example binary)
 #
 # Primary Documentation:
-# Run: cargo doc --package doipserver-lib --no-deps --open
+# Run: cargo doc --package uds2sovd-proxy-lib --no-deps --open
 # This opens the main library documentation (architectural overview and all modules).
 # This excludes all external dependency documentation.
 #
 # View all workspace crates (excluding dependencies):
 # Run: cargo doc --no-deps --open
-# This shows doipserver-lib, doip-server, and Example crates only.
+# This shows uds2sovd-proxy-lib, uds2sovd-proxy, and example crates only.
 
 [workspace]
-members = ["src", "app", "Example"]
+members = ["src", "app", "example"]
 resolver = "3"
 
 # Metadata for documentation generation and tooling
@@ -36,6 +36,6 @@ license = "Apache-2.0"
 
 [workspace.metadata.docs.rs]
 # Default to the main library for documentation.
-# Primary documentation entry point is doipserver-lib.
+# Primary documentation entry point is uds2sovd-proxy-lib.
 # Use `cargo doc --open` to view the main library documentation.
-default-target = "doipserver-lib"
+default-target = "uds2sovd-proxy-lib"

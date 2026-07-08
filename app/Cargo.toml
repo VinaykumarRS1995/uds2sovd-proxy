@@ -10,18 +10,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 [package]
-name        = "doip-server"
+name        = "uds2sovd-proxy"
 version     = "0.1.0"
 edition     = "2024"
 rust-version = "1.85"
-description = "DoIP server binary — wires configuration, transports, and handlers"
+description = "UDS-to-SOVD Proxy — wires configuration, transports, and handlers"
 
 [[bin]]
-name = "doip-server"
+name = "uds2sovd-proxy"
 path = "main.rs"
 
 [dependencies]
-uds2sovd           = { path = "../src", package = "doipserver-lib" }
+uds2sovd           = { path = "../src", package = "uds2sovd-proxy-lib" }
 tokio              = { version = "1", features = ["net", "io-util", "macros", "rt-multi-thread", "signal"] }
 tracing            = "0.1"
 tracing-subscriber = "0.3"

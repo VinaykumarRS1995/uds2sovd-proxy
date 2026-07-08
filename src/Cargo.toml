@@ -10,11 +10,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 [package]
-name = "doipserver-lib"
+name = "uds2sovd-proxy-lib"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
-description = "DoIP server library — core DoIP protocol implementation, decoupled from transport and application logic"
+description = "UDS-to-SOVD Proxy library - DoIP Server, Translation, and SOVD Proxy"
 
 [dependencies]
 tokio              = { version = "1", features = ["net", "io-util", "macros", "rt-multi-thread", "signal"] }
@@ -26,5 +26,5 @@ tracing-subscriber = "0.3"
 thiserror          = "2"
 
 [lib]
-name = "doipserverlib"
+name = "uds2sovd_proxy_lib"
 path = "lib.rs"
