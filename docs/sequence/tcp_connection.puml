@@ -25,7 +25,7 @@ sequenceDiagram {
 participant "Client" as Client
 participant "TCP Service" as Tcp
 participant "Session" as Sess
-participant "UDS2SOVD" as Proxy
+participant "UDS-to-SOVD" as Proxy
 
 == Connection Establishment ==
 

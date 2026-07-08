@@ -24,7 +24,7 @@ https://www.apache.org/licenses/LICENSE-2.0
   ```sh
   cargo doc-all
   ```
-  Shows doipserverlib, doip-server, and Example (test client) — no external dependency docs
+  Shows doipserverlib, uds2sovd-proxy, and example (test client) — no external dependency docs
 
 - **View All with Dependencies**:
   ```sh
@@ -37,9 +37,9 @@ Available cargo aliases are defined in `.cargo/config.toml`
 ## Linting & Clippy
 
 - **Clippy**: Always run with `clippy::pedantic` enabled for stricter linting.
-  - Example: `cargo clippy --all-targets --all-features -- -D warnings -W clippy::pedantic`
+  - example: `cargo clippy --all-targets --all-features -- -D warnings -W clippy::pedantic`
 - **Allow/Forbid**: Use `#[allow(...)]` only when necessary, and always document the reason.
-  - Example: `#[allow(clippy::ref_option)] // Not compatible with serde derive`
+  - example: `#[allow(clippy::ref_option)] // Not compatible with serde derive`
 - **Warnings**: Treat all warnings as errors.
 
 ## Formatting
@@ -61,7 +61,7 @@ cargo +nightly fmt -- --check --config error_on_unformatted=true,error_on_line_o
 ```
 
 It is recommended to configure your IDE to use nightly rustfmt with these settings as well.
-Example for VS Code:
+example for VS Code:
 ```json
 "rust-analyzer.rustfmt.overrideCommand": [
     "rustfmt",
@@ -111,7 +111,7 @@ Additionally the import granularity is set to `crate` to group all imports from 
 - **Public items**: All public structs, enums, traits, and functions must have `///` documentation:
   - Explain *what* the item does and *when* it should be used
   - Include an "# Errors" section for fallible operations
-  - Add "# Example" sections only where usage patterns aren't obvious
+  - Add "# example" sections only where usage patterns aren't obvious
 
 - **Language and clarity**:
   - Use clear, concise language without unnecessary verbosity

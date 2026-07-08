@@ -28,12 +28,12 @@ use std::sync::Arc;
 /// - [`handlers::AliveCheckHandler`]
 /// - [`handlers::DiagnosticsHandler`]
 ///
-/// # Example
+/// # example
 ///
 /// ```no_run
-/// use doipserver_lib::doip;
-/// use doipserver_lib::proxy::StubProxy;
-/// use doipserver_lib::doip::types::LogicalAddress;
+/// use uds2sovd_proxy_lib::doip;
+/// use uds2sovd_proxy_lib::proxy::StubProxy;
+/// use uds2sovd_proxy_lib::doip::types::LogicalAddress;
 /// use std::sync::Arc;
 ///
 /// let dispatcher = doip::tcp_dispatcher(
@@ -60,12 +60,12 @@ pub fn tcp_dispatcher(
 /// - [`handlers::EntityStatusHandler`] with `max_connections = 10` and
 ///   `max_data_size = 65_535`
 ///
-/// # Example
+/// # example
 ///
 /// ```no_run
-/// use doipserver_lib::doip;
-/// use doipserver_lib::config::EcuConfig;
-/// use doipserver_lib::doip::types::LogicalAddress;
+/// use uds2sovd_proxy_lib::doip;
+/// use uds2sovd_proxy_lib::config::EcuConfig;
+/// use uds2sovd_proxy_lib::doip::types::LogicalAddress;
 ///
 /// let ecu = EcuConfig::default();
 /// let dispatcher = doip::udp_dispatcher(

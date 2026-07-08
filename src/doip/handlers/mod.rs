@@ -28,8 +28,8 @@
 //! Implement the [`crate::doip::PayloadHandler`] trait to add custom message handling:
 //!
 //! ```ignore
-//! use doipserver_lib::doip::{PayloadHandler, Response};
-//! use doipserver_lib::doip::types::LogicalAddress;
+//! use uds2sovd_proxy_lib::doip::{PayloadHandler, Response};
+//! use uds2sovd_proxy_lib::doip::types::LogicalAddress;
 //!
 //! struct MyHandler;
 //!
