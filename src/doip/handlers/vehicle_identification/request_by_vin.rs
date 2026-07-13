@@ -88,7 +88,7 @@ mod tests {
     fn wrong_length_returns_error() {
         let req = UdpRequest::new(
             UdpPayloadType::VehicleIdentificationRequestWithVin,
-            vec![0x00; 3], // 3 bytes — less than required 17
+            vec![0x00; 3], // 3 bytes - less than required 17
         );
         assert!(matches!(
             handler().handle(req),
@@ -102,7 +102,7 @@ mod tests {
     fn payload_too_long_returns_error() {
         let req = UdpRequest::new(
             UdpPayloadType::VehicleIdentificationRequestWithVin,
-            vec![0x00; 18], // 18 bytes — more than required 17
+            vec![0x00; 18], // 18 bytes - more than required 17
         );
         assert!(matches!(
             handler().handle(req),

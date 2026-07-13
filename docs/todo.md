@@ -10,17 +10,13 @@ terms of the Apache License Version 2.0 which is available at
 https://www.apache.org/licenses/LICENSE-2.0
 -->
 
-# DoIP Server — TODO and Future Work
+This document tracks planned implementation work and longer-term improvements. This list is not exhaustive and is subject to change as the project evolves.
 
-This document tracks implementation TODOs and future improvements for the current DoIP server.
-It is aligned with the present codebase (stub backend, synchronous proxy contract, and startup-time configuration loading).
+# TODOs
 
----
+Near-term items that are directly actionable in the current codebase.
 
-## A) TODOs
-
-### A1. Replace `StubProxy` with real backend integration
-
+## Replace `StubProxy` with real backend integration
 
 **Why**
 - Diagnostic forwarding currently ends at `StubProxy`.
@@ -31,7 +27,7 @@ It is aligned with the present codebase (stub backend, synchronous proxy contrac
 - Add backend configuration and connection handling.
 - Validate end-to-end diagnostic flows.
 
-### A2. Improve shutdown control model
+## Improve shutdown control model
 
 **Why**
 - Shutdown is currently triggered by `Ctrl+C`.
@@ -42,7 +38,7 @@ It is aligned with the present codebase (stub backend, synchronous proxy contrac
 - Add programmatic shutdown trigger.
 - Add graceful drain behaviour before full stop.
 
-### A3. Add CLI argument parsing
+## Add CLI argument parsing
 
 **Why**
 - Current startup argument handling can be improved for usability.
@@ -52,7 +48,7 @@ It is aligned with the present codebase (stub backend, synchronous proxy contrac
 - Improve argument validation and error messages.
 - Standardize help output and startup options.
 
-### A4. Add future configuration sources
+## Add future configuration sources
 
 **Why**
 - Current providers cover defaults and TOML.
@@ -63,8 +59,7 @@ It is aligned with the present codebase (stub backend, synchronous proxy contrac
 - Evaluate remote configuration service integration.
 - Keep the `ConfigProvider` abstraction unchanged.
 
-### A5. Code quality improvement candidates
-
+## Code quality improvement candidates
 
 **Why**
 - Repeated constructor-style patterns may appear as the codebase grows.
@@ -73,9 +68,7 @@ It is aligned with the present codebase (stub backend, synchronous proxy contrac
 - Consider `#[derive(new)]` where it improves consistency.
 - Apply only when it reduces boilerplate without harming readability.
 
-### A6. Routing activation state machine
-
-
+## Routing activation state machine
 
 **Why**
 - Routing activation is currently handled by a simple success response handler.
@@ -86,13 +79,11 @@ It is aligned with the present codebase (stub backend, synchronous proxy contrac
 - Validate activation requests against the current session context.
 - Return protocol-correct activation responses and failures.
 
----
+# Future work
 
-## B) High-priority roadmap
+Longer-term enhancements that depend on architectural evolution, broader interoperability goals, or future deployment requirements.
 
-### B1. Asynchronous backend processing
-
-
+## Asynchronous backend processing
 
 **Why**
 - `SovdProxy::process()` is synchronous.
@@ -103,9 +94,7 @@ It is aligned with the present codebase (stub backend, synchronous proxy contrac
 - Update diagnostic handling path to async flow.
 - Add integration tests for latency and backpressure.
 
-### B2. UDS Response Pending support (`0x78`)
-
-
+## UDS Response Pending support (`0x78`)
 
 **Why**
 - Current flow assumes immediate request/response.
@@ -115,9 +104,7 @@ It is aligned with the present codebase (stub backend, synchronous proxy contrac
 - Add response-pending handling in diagnostic path.
 - Validate client interoperability for delayed completion.
 
-### B3. TLS-secured DoIP transport
-
-
+## TLS-secured DoIP transport
 
 **Why**
 - Current transport is not encrypted.
@@ -127,57 +114,14 @@ It is aligned with the present codebase (stub backend, synchronous proxy contrac
 - Add certificate and key management.
 - Validate secure client interoperability.
 
----
-
-## C) Medium-priority roadmap
-
-### C1. Additional DoIP message support
-
-
+## Additional DoIP message support
 
 **Actions**
 - Expand handler coverage for required ISO 13400-2 flows.
 - Add protocol compatibility tests.
 
-### C2. Observability improvements
-
-
-
-**Actions**
-- Improve structured logs and request correlation.
-- Add runtime metrics (connection/session/protocol counters).
-
-### C3. Configuration validation hardening
-
-
+## Configuration validation hardening
 
 **Actions**
 - Strengthen startup validation and error reporting.
 - Add invalid-configuration test coverage.
-
----
-
-## D) Deferred items
-
-### D1. Persistent runtime state
-
-Deferred
-
-**Reason**
-- Current design intentionally uses in-memory runtime state.
-
-### D2. Multi-entity support
-
-Deferred
-
-**Reason**
-- Current deployment model assumes one DoIP entity per instance.
-
-### D3. Distributed deployment support
-
-Deferred
-
-**Reason**
-- Current architecture targets single-process operation.
-
----

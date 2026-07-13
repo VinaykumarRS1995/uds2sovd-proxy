@@ -8,10 +8,10 @@
 // terms of the Apache License Version 2.0 which is available at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-//! UDS tester client - simulates the external UDS tester.
+//! DoIP tester tool - simulates the external UDS tester.
 //!
-//! The server (`uds2sovd-proxy`) must be running in order for the `tools/doip-tester`
-//! binary to connect and verify the functionality.
+//! The server (`uds2sovd-proxy`) must be running in order for this tester tool
+//! to connect and verify the functionality.
 //!
 //! # Usage
 //! ```sh
@@ -289,7 +289,7 @@ fn main() {
                 passed += 1;
             }
             Err(e) => {
-                println!("[FAIL] {name} — {e}");
+                println!("[FAIL] {name} - {e}");
                 failed += 1;
             }
         }
@@ -303,7 +303,7 @@ fn main() {
             Some(s)
         }
         Err(e) => {
-            println!("[FAIL] tcp_routing_activation — {e}");
+            println!("[FAIL] tcp_routing_activation - {e}");
             failed += 1;
             None
         }
@@ -325,14 +325,14 @@ fn main() {
                     passed += 1;
                 }
                 Err(e) => {
-                    println!("[FAIL] {name} — {e}");
+                    println!("[FAIL] {name} - {e}");
                     failed += 1;
                 }
             }
         }
     } else {
-        println!("[SKIP] tcp_alive_check — no TCP connection");
-        println!("[SKIP] tcp_diagnostic_tester_present — no TCP connection");
+        println!("[SKIP] tcp_alive_check - no TCP connection");
+        println!("[SKIP] tcp_diagnostic_tester_present - no TCP connection");
     }
 
     // TCP error tests (separate connections)
@@ -349,7 +349,7 @@ fn main() {
                 passed += 1;
             }
             Err(e) => {
-                println!("[FAIL] {name} — {e}");
+                println!("[FAIL] {name} - {e}");
                 failed += 1;
             }
         }

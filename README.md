@@ -45,10 +45,12 @@ The UDS-to-SOVD Proxy consists of three components:
 At a high level, testers use UDP for discovery and TCP for diagnostic sessions. Incoming DoIP messages are parsed and dispatched to protocol handlers. Diagnostic payloads are then transformed into SOVD REST API calls and sent to the SOVD server. The responses are then translated back into UDS format and returned to the tester.
 
 The **DoIP Server** consists of below modules:
-1. **Transport handling** - UDP for discovery & TCP for diagnostic sessions.
-2. **Protocol processing** - DoIP protocol specific processing by dispatching requests to the handlers.
+1. **Transport handling (server)** - UDP for discovery & TCP for diagnostic sessions.
+2. **Protocol processing (doip)** - DoIP protocol specific processing by dispatching requests to the handlers.
 
 ![DoIP Server](docs/doip_server.svg)
+
+Refer to [detailed design](docs/detailed_design.md) for detailed design and runtime flows.
 
 ## Getting Started
 
@@ -94,10 +96,10 @@ cargo doc-all
 
 | Document | Description |
 | --- | --- |
-| [Detailed design](docs/detailed_design.md) | System architecture and design rationale |
-| [Usage](docs/usage.md) | Usage guide |
-| [Limitations](docs/limitation.md) | Current functional and operational limitations |
-| [Future work](docs/todo.md) | TODO items and roadmap |
+| [Detailed design](docs/detailed_design.md) | System architecture, design rationale and runtime behaviour |
+| [Usage](docs/usage.md) | Build, configuration, and run instructions |
+| [Limitations](docs/limitation.md) | Current functional and operational constraints and assumptions |
+| [Future work](docs/todo.md) | Planned enhancements and roadmap |
 
 ## developing
 

@@ -10,16 +10,12 @@ terms of the Apache License Version 2.0 which is available at
 https://www.apache.org/licenses/LICENSE-2.0
 -->
 
-# DoIP Server — Current Limitations
+This document lists the current constraints of the UDS-to-SOVD Proxy.
+Any known mitigations are documented in the [TODO](todo.md).
 
-This document lists the current functional and operational limitations of this UDS-to-SOVD DoIP server.
-It reflects the implementation status in this repository.
+# Limitations
 
----
-
-## 1) Functional Limitations
-
-### 1.1 Stub backend only
+## Stub backend only
 
 **Current state**
 - Diagnostic forwarding uses a stub `SovdProxy` implementation.
@@ -29,14 +25,7 @@ It reflects the implementation status in this repository.
 - End-to-end transport and protocol flow can be validated.
 - Real diagnostic service execution is not available.
 
-**Mitigation**
-- Implement and register a production `SovdProxy`.
-
----
-
-## 2) Protocol Limitations
-
-### 2.1 Partial DoIP message coverage
+## Partial DoIP message coverage
 
 **Currently supported**
 - Vehicle identification (general / by VIN / by EID)
@@ -49,10 +38,7 @@ It reflects the implementation status in this repository.
 - Message types outside this set are not supported.
 - Interoperability depends on whether external tools require unsupported messages.
 
-**Mitigation**
-- Add new handlers and register them in the dispatcher.
-
-### 2.2 No TLS-secured DoIP
+## No TLS-secured DoIP
 
 **Current state**
 - TLS transport security is not implemented.
@@ -60,12 +46,7 @@ It reflects the implementation status in this repository.
 **Impact**
 - Traffic is unencrypted on the network path.
 
-**Mitigation**
-- Deploy only in a trusted network or behind secured infrastructure.
-
----
-
-### 2.3 No asynchronous diagnostic processing
+## No asynchronous diagnostic processing
 
 **Current state**
 - Diagnostic forwarding assumes a request/response interaction.
@@ -74,25 +55,7 @@ It reflects the implementation status in this repository.
 **Impact**
 - Long-running diagnostic operations cannot be represented correctly.
 
-**Mitigation**
-- Introduce asynchronous backend processing and response pending support.
-
----
-
-## 3) Operational Limitations
-
-### 3.1 No runtime configuration reload
-
-**Current state**
-- Configuration is loaded during startup only.
-
-**Impact**
-- Any configuration change requires restart.
-
-**Mitigation**
-- Apply configuration updates during planned maintenance windows.
-
-### 3.2 No explicit graceful drain on shutdown
+## No explicit graceful drain on shutdown
 
 **Current state**
 - The application does not provide an explicit session-drain phase before termination.
@@ -100,14 +63,7 @@ It reflects the implementation status in this repository.
 **Impact**
 - In-flight requests may be interrupted during process stop.
 
-**Mitigation**
-- Use controlled restarts and avoid shutdown during active diagnostics.
-
----
-
-## 4) Technical Constraints
-
-### 4.1 Synchronous backend interface
+## Synchronous backend interface
 
 **Current state**
 - `SovdProxy` uses a synchronous processing contract.
@@ -115,39 +71,11 @@ It reflects the implementation status in this repository.
 **Impact**
 - Backend implementations that rely on remote I/O may block execution.
 
-**Mitigation**
-- Introduce an asynchronous backend contract when integrating a production backend.
-
-### 4.2 In-memory runtime state only
-
-**Current state**
-- Session/runtime state is held in memory.
-
-**Impact**
-- Runtime state is lost after restart.
-
-**Mitigation**
-- Acceptable for current design scope; persistence can be added only if future requirements demand it.
-
----
-
-## 5) Assumptions
-
-This implementation assumes:
-- Single DoIP entity per server instance
-- Stable network connectivity
-- Single process deployment model
-- Backend availability once production backend integration is added
-
----
-
-## Related Documentation
+# Related Documentation
 
 | Document | Purpose |
 | --- | --- |
 | [README](../README.md) | Project overview and getting started |
 | [Detailed Design](detailed_design.md) | System architecture and design rationale |
-| [TODO](doip_server_todo.md) | Planned enhancements and roadmap |
-| [USAGE](doip_server_usage.md) | Installation, configuration, and operation |
-
----
+| [TODO](todo.md) | Planned enhancements and roadmap |
+| [Usage](usage.md) | Installation, configuration, and operation |

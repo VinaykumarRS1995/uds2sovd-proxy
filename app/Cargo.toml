@@ -14,7 +14,7 @@ name        = "uds2sovd-proxy"
 version     = "0.1.0"
 edition     = "2024"
 rust-version = "1.85"
-description = "UDS-to-SOVD Proxy — wires configuration, transports, and handlers"
+description = "UDS-to-SOVD Proxy - composition of DoIP Server, UDS-to-SOVD Translation and SOVD proxy"
 
 [[bin]]
 name = "uds2sovd-proxy"

@@ -59,7 +59,7 @@ pub(super) mod fixtures {
     /// Group ID (6 bytes, all-zero = no grouping per ISO 13400-2)
     pub const TEST_GID: Gid = Gid::new([0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
-    /// ECU logical address — intentionally outside the standard ECU range    
+    /// ECU logical address - intentionally outside the standard ECU range    
     /// ECU logical address (ISO 13400-2 range 0x0001–0x0DFF)
     pub const TEST_ADDR: LogicalAddress = LogicalAddress::new(0x0E01);
 

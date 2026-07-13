@@ -10,9 +10,9 @@ terms of the Apache License Version 2.0 which is available at
 https://www.apache.org/licenses/LICENSE-2.0
 -->
 
-# DoIP Server — Usage Guide
+# Usage Guide
 
-This document explains how to build, configure, run, and troubleshoot the DoIP server in this repository.
+This document explains how to build, configure, and run the UDS-to-SOVD Proxy.
 
 ## Command Line Arguments
 
@@ -41,8 +41,6 @@ cd app
 cargo run -- config.toml
 ```
 
----
-
 ## Configuration
 
 The server supports two configuration modes:
@@ -58,9 +56,7 @@ Run the server without arguments to use the built-in defaults:
 cargo run -p uds2sovd-proxy
 ```
 
-It uses the default configuration defined in [default.rs](../src/config/defaults.rs).
-
----
+It uses the default configuration defined in [defaults.rs](../src/config/defaults.rs).
 
 ## TOML Configuration
 
@@ -79,3 +75,11 @@ cargo run -- config.toml
 
 Both configuration modes provide the same runtime behaviour once the server starts.
 
+## Related Documentation
+
+| Document | Purpose |
+| --- | --- |
+| [README](../README.md) | Project overview and quick start |
+| [Detailed design](detailed_design.md) | Architecture and runtime behaviour |
+| [Limitations](limitation.md) | Current functional and operational constraints |
+| [TODO](todo.md) | Planned enhancements and roadmap |

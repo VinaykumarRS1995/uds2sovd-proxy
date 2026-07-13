@@ -10,7 +10,17 @@
 
 //! UDS-to-SOVD Proxy application.
 //!
-//! Standalone binary that runs the UDS-to-SOVD proxy.
+//! Application entry point for the UDS-to-SOVD Proxy.
+//!
+//! This crate is the operational starting point of the system and defines
+//! the full runtime lifecycle:
+//! 1. initialize logging
+//! 2. load runtime configuration
+//! 3. construct transport and protocol handlers
+//! 4. start serving traffic and react to shutdown signals
+//!
+//! It uses the `uds2sovd-proxy-lib` crate for the core protocol and backend logic,
+//! and provides a simple command-line interface for running the server.
 //!
 //! # Running
 //!
@@ -30,8 +40,8 @@
 //!
 //! # See Also
 //!
-//! - Main library: [uds2sovd_proxy_lib](../uds2sovd_proxy_lib/index.html) for API details
-//! - Test client: `cargo run --bin doip-tester` for testing
+//! - Main library: the `uds2sovd-proxy-lib` crate documentation for API details
+//! - Tester tool: `cargo run --bin doip-tester` for end-to-end checks
 use std::sync::Arc;
 use uds2sovd_proxy_lib::{config, doip, error, proxy, server};
 
@@ -54,7 +64,7 @@ async fn main() -> Result<(), AppError> {
 
     tracing::info!("Starting DoIP server");
 
-    // TODO: Replace StubProxy with real UDS-to-SOVD proxy implementation.
+    // TODO: Replace StubProxy with real UDS-to-SOVD Proxy implementation.
     let (tcp_config, udp_config, ecu_config) = config.into_parts();
     let tcp_dispatcher = doip::tcp_dispatcher(tcp_config.logical_address(), Arc::new(StubProxy));
     let udp_dispatcher = doip::udp_dispatcher(udp_config.logical_address(), &ecu_config);

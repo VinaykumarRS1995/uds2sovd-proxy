@@ -15,15 +15,13 @@
 //! Implements ISO 13400-2 Diagnostics over Internet Protocol (DoIP) as a bridge
 //! between UDS (Unified Diagnostic Services) and SOVD backends.
 //!
-//! This library provides the core protocol implementation and is the shared
-//! foundation for the workspace's three parts:
+//! This library provides the core protocol implementation and is the foundation for the application:
 //!
-//! - `src`: core DoIP protocol and backend integration logic
-//! - `app`: the standalone UDS-to-SOVD proxy server application
-//! - `tools/doip-tester`: the manual tester client used to exercise the server
+//! - `uds2sovd-proxy-lib`: the library crate with the DoIP protocol and backend logic
+//! - `uds2sovd-proxy`: the standalone UDS-to-SOVD Proxy application
+//! - `doip-tester`: the manual tester tool used to exercise the application
 //!
-//! For application-level workflows, use the server application and tester tool
-//! alongside this library.
+//! For application-level workflows, use the server application and tester tool.
 //!
 //! # Quick Start
 //!
@@ -68,8 +66,8 @@
 //!
 //! - **API Documentation**: Explore modules and types above
 //! - **Architecture**: See embedded design documentation below
-//! - **Running the Server**: See the `app` crate docs for the standalone server
-//! - **Testing**: See the `tools/doip-tester` crate docs for the tester tool
+//! - **Running the Server**: See the `uds2sovd-proxy` crate docs for the standalone server
+//! - **Testing**: See the `doip-tester` crate docs for the tester tool
 
 pub mod config;
 pub mod doip;

@@ -12,7 +12,6 @@ https://www.apache.org/licenses/LICENSE-2.0
 # High-Level Design
 
 This document describes the system architecture, component responsibilities, runtime behaviour, and design rationale of the UDS-to-SOVD Proxy.
-For project introduction and getting started, see [README.md](../README.md).
 
 ## Contents
 
@@ -20,7 +19,7 @@ For project introduction and getting started, see [README.md](../README.md).
 - [Scope](#scope)
 - [Architectural Goals](#architectural-goals)
 - [Architecture Overview](#architecture-overview)
-- [Layers](#layers)
+- [System Components](#system-components)
 - [Component Responsibilities](#component-responsibilities)
 - [Module Responsibilities](#module-responsibilities)
 - [Runtime Flow](#runtime-flow)
@@ -29,13 +28,11 @@ For project introduction and getting started, see [README.md](../README.md).
 - [Extension Points](#extension-points)
 - [Related Documentation](#related-documentation)
 
----
-
 ## System Context
 
 Modern vehicle diagnostics are transitioning from ECU-centric UDS communication toward service-oriented architectures. Diagnostic testers continue to use UDS over DoIP, while backends increasingly expose capabilities through SOVD interfaces.
 
-The UDS-to-SOVD proxy bridges these environments. It accepts DoIP communication from diagnostic tools, handles the transport and protocol concerns, and forwards diagnostic requests to a backend integration layer (SOVD ).
+The UDS-to-SOVD Proxy bridges these environments. It accepts DoIP communication from diagnostic tools, handles the transport and protocol concerns, and forwards diagnostic requests to a backend integration component (SOVD).
 
 ```text
 Diagnostic Tester (UDS over DoIP)
@@ -50,8 +47,6 @@ Diagnostic Tester (UDS over DoIP)
 
 The proxy is not responsible for executing UDS services, managing diagnostic sessions at the application level, or implementing security access algorithms. Those responsibilities belong to the backend.
 
----
-
 ## Scope
 
 **Supported:**
@@ -64,51 +59,37 @@ The proxy is not responsible for executing UDS services, managing diagnostic ses
 
 Known functional, protocol, and operational limitations are documented in [Limitation](limitation.md).
 
----
-
 ## Architectural Goals
 
 | Goal | What it means |
 | --- | --- |
 | **Modularity** | Components are organized by responsibility and communicate through explicit interfaces. |
 | **Extensibility** | New handlers, configuration providers, and backend integrations can be added without modifying existing components. |
-| **Protocol independence** | Transport, protocol, and backend layers are decoupled from each other. |
+| **Protocol independence** | Transport, protocol, and backend modules are decoupled from each other. |
 | **Testability** | All major components can be tested independently using stubs and mock implementations. |
 | **Standards compliance** | Transport and protocol behaviour follow ISO 13400-2 (DoIP). |
 
----
-
 ## Architecture Overview
-
-The system is organized into five layers communicating top-to-bottom:
-
-<!-- ![UDS-to-SOVD Proxy Module Structure](modules.svg) -->
 
 ![UDS-to-SOVD Proxy Component Architecture](architecture.svg)
 
-The application entry point wires all layers together at startup. Configuration flows downward through the system, while diagnostic requests flow upward from the transport layer through protocol processing and into backend integration components.
+The application entry point wires all components together at startup. Configuration flows downward through the system, while diagnostic requests flow upward from the transport runtime through protocol processing and into backend integration components.
 
----
+## System Components
 
-## Layers
-
-| Layer | Responsibility |
+| Component | Responsibility |
 | --- | --- |
 | Application | Startup and runtime wiring |
-| Configuration | Configuration loading and runtime models |
+| Configuration | Configuration loading |
 | Transport Runtime | TCP and UDP communication |
 | Protocol Processing | Message dispatching and handler execution |
 | Backend Integration | Diagnostic forwarding and backend abstraction |
-
----
 
 ## Component Responsibilities
 
 ### Application
 
 The application entry point selects a configuration source, builds the transport services and their associated dispatchers, and starts the server runtime. It is the only place in the system where all components are wired together.
-
----
 
 ### Configuration
 
@@ -125,8 +106,6 @@ Responsible for loading and providing runtime configuration to the server.
 - `TomlConfigProvider` - deserializes a TOML file; primary provider for production deployments
 
 The server consumes a fully-constructed `ServerConfig`. It is unaware of how the configuration was produced or where it came from.
-
----
 
 ### Transport Runtime
 
@@ -145,8 +124,6 @@ Responsible for all network-level communication.
 - Dispatches each datagram independently - there is no persistent session state on UDP
 
 Both TCP and UDP implement the same `Transport` interface so they can be started concurrently without the server needing to know about their internal differences.
-
----
 
 ### Protocol Processing
 
@@ -172,8 +149,6 @@ Each handler is responsible for exactly one DoIP message type.
 
 Handlers are registered with the dispatcher at startup. Adding support for a new DoIP message type requires only implementing a new handler and registering it.
 
----
-
 ### Backend Integration
 
 Defines the stable boundary between protocol processing and backend implementation.
@@ -188,71 +163,85 @@ Defines the stable boundary between protocol processing and backend implementati
 
 The `DiagnosticsHandler` calls the proxy without knowing which implementation is active. Replacing the stub with a real SOVD backend requires only providing a new `SovdProxy` implementation - no handler or transport code changes.
 
----
-
 ## Module Responsibilities
+
+The following Rust modules implement the System Components defined above.
 
 | Module | Responsibility |
 | --- | --- |
-| `config` | Configuration loading trait, provider implementations, runtime config model |
-| `server` | TCP and UDP transport runtime, session management, connection lifecycle |
-| `doip` | DoIP message dispatching, handler execution, protocol error handling |
-| `proxy` | Backend abstraction trait and stub implementation |
-| `error` | Top-level application error type aggregating all sub-system errors |
-
----
+| `config` | Implements the Configuration component: configuration loading traits, provider implementations, and runtime configuration model |
+| `server` | Implements the Transport Runtime component: TCP and UDP runtime, session management, and connection lifecycle |
+| `doip` | Implements the Protocol Processing component: dispatching, handler execution, and protocol error handling |
+| `proxy` | Implements the Backend Integration component: backend abstraction trait and stub implementation |
+| `error` | Supports cross-component error aggregation at the application boundary |
 
 ## Runtime Flow
 
 ### Startup
 
-At startup, the application:
+![Startup sequence](sequence/startup.svg)
 
-1. Selects a configuration source based on program arguments (TOML file or defaults)
-2. Loads the server configuration
-3. Builds the TCP dispatcher with all TCP handlers registered
-4. Builds the UDP dispatcher with all UDP handlers registered
-5. Constructs the TCP and UDP transport services
-6. Starts both transports concurrently and waits for shutdown
+Intent: initialize configuration and start TCP/UDP runtimes together.
+
+Primary flow:
+1. Select configuration source from CLI path or built-in defaults.
+2. Load and validate `ServerConfig`.
+3. Build TCP and UDP dispatchers with registered handlers.
+4. Construct TCP and UDP transport services.
+5. Start server runtime and run both transports concurrently.
+6. Keep running until shutdown is triggered.
+
+Important branches:
+- If TCP listener bind fails, startup fails and the application exits with an error.
+- If UDP socket bind fails, startup fails and the application exits with an error.
+
+Guarantees:
+- Startup either reaches a running state with both transports active or fails fast.
+- Configuration is resolved before any network service starts.
 
 ### TCP Request Processing
 
-For each incoming TCP connection:
+![TCP connection sequence](sequence/tcp_connection.svg)
 
-1. The transport accepts the connection and checks whether capacity is available
-2. If capacity is exceeded, a NACK is sent and the connection is dropped
-3. If capacity is available, a session is created and driven in a dedicated task
-4. The session reads bytes from the stream and extracts complete DoIP frames
-5. Each frame is dispatched to the registered handler
-6. The handler response is written back to the client
-7. When the session ends for any reason, the session slot is released automatically
+Intent: process DoIP requests per session while enforcing session limits.
+
+Primary flow:
+1. Accept incoming TCP connection.
+2. Check session capacity.
+3. Create a session task for accepted connections.
+4. Read stream bytes and frame complete DoIP messages.
+5. Dispatch each frame to the registered TCP handler.
+6. Write handler response back to the client.
+
+Important branches:
+- If maximum sessions are reached, reject connection and close it.
+- If a request is invalid, return a negative acknowledgment (NACK).
+- If request is diagnostic, forward payload to backend proxy and return proxy response.
+- Communication failure terminates the session loop.
+
+Guarantees:
+- Session slot is released automatically when the session ends.
+- Capacity limits are enforced before request processing continues.
 
 ### UDP Request Processing
 
-For each incoming UDP datagram:
+![UDP request sequence](sequence/udp_request.svg)
 
-1. The transport receives the datagram
-2. The datagram is parsed as a single complete DoIP message
-3. The message is dispatched to the registered handler
-4. The handler response is sent back to the originating address
-5. For discovery requests where the entity's identity does not match, no response is sent (per ISO 13400-2)
+Intent: process each UDP datagram independently without session state.
 
----
+Primary flow:
+1. Receive UDP datagram.
+2. Parse it as a complete DoIP message.
+3. Dispatch to the matching UDP handler.
+4. Send response to the originating address when applicable.
 
-## Protocol Flow
+Important branches:
+- For EID/VIN mismatch in discovery, silently drop (no response) per ISO 13400-2.
+- For invalid requests, return a negative acknowledgment (NACK).
 
-All DoIP messages follow the same dispatcher pattern:
-
-```text
-Incoming Request (TCP or UDP)
-  -> Dispatcher (routes by payload type)
-  -> Registered Handler
-  -> Response (sent back to client)
-```
-
-Specific message types and their handlers are listed in the [Payload Handlers table](#payload-handlers) above. The dispatcher is payload-type-agnostic and applies the same routing logic to all handler types.
-
----
+Guarantees:
+- No persistent session state is created for UDP processing.
+- Datagrams are handled independently.
 
 ## Design Decisions
 
@@ -276,8 +265,6 @@ The `SovdProxy` interface isolates the diagnostic handler from any specific back
 
 Each protocol error maps explicitly to the correct DoIP Generic Header NACK code. The mapping is centralized so that transport code does not need to make decisions about which NACK code applies to which error condition.
 
----
-
 ## Extension Points
 
 | Extension Point | How to extend |
@@ -285,13 +272,11 @@ Each protocol error maps explicitly to the correct DoIP Generic Header NACK code
 | `ConfigProvider` | Implement the trait to add new configuration sources (environment variables, remote config, etc.) |
 | `PayloadHandler` | Implement the trait and register with the dispatcher to handle new DoIP message types |
 | `SovdProxy` | Implement the trait to connect a real SOVD backend, simulation, or alternative diagnostic system |
-| `Transport` | Implement the trait to add new transport types if required |
-
----
 
 ## Related Documentation
 
 | Document | Purpose |
 | --- | --- |
-| [UDS-to-SOVD Proxy Component Architecture](architecture.svg) | Component architecture diagram |
-| [UDS-to-SOVD Proxy Module Structure](modules.svg) | Module structure diagram |
+| [Usage](usage.md) | Build, configuration, and operation |
+| [Limitations](limitation.md) | Current functional, protocol, and operational constraints |
+| [TODO](todo.md) | Planned enhancements and roadmap |

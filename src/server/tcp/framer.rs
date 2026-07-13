@@ -33,7 +33,7 @@ impl Frame {
 ///
 /// DoIP has no start-of-frame markers or escape sequences. Framing relies
 /// entirely on the length field in the 8-byte header. Once a frame is parsed,
-/// the framer commits to that interpretation — there's no way to resynchronize
+/// the framer commits to that interpretation - there's no way to resynchronize
 /// mid-stream if corruption occurs.
 ///
 /// # Error handling
@@ -80,7 +80,7 @@ impl Framer {
             let header = match DoipHeader::parse(&self.buffer[..HEADER_LEN]) {
                 Ok(h) => h,
                 Err(e) => {
-                    // Protocol version errors — no recovery possible mid-stream.
+                    // Protocol version errors - no recovery possible mid-stream.
                     // Return error and let connection handler close per ISO 13400-2  7.2
                     frames.push(Err(e));
                     break;
@@ -112,7 +112,7 @@ impl Framer {
 
             let total_len = HEADER_LEN + payload_len;
             if self.buffer.len() < total_len {
-                break; // payload not yet fully received — wait for more data
+                break; // payload not yet fully received - wait for more data
             }
 
             let payload_type = match TcpPayloadType::try_from(payload_type_raw) {

@@ -29,13 +29,13 @@ address = "0.0.0.0:13400"
 logical_address = 1
 
 [ecu]
-# Vehicle Identification Number — 17 ASCII bytes (ISO 3779)
+# Vehicle Identification Number - 17 ASCII bytes (ISO 3779)
 # Each value is the ASCII code of the character: '0' = 48, 'A' = 65, etc.
 # Below represents VIN "00000000000000000"
 vin = [48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48]
-# Entity Identifier — 6 bytes, typically the MAC address of the DoIP interface
+# Entity Identifier - 6 bytes, typically the MAC address of the DoIP interface
 # example: MAC 00:00:00:00:00:00
 eid = [0, 0, 0, 0, 0, 0]
-# Group Identifier — 6 bytes, groups DoIP entities on the same subnet
+# Group Identifier - 6 bytes, groups DoIP entities on the same subnet
 # example: GID 00:00:00:00:00:00
 gid = [0, 0, 0, 0, 0, 0]

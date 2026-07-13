@@ -54,7 +54,7 @@ impl SessionManager {
                 ConnectionSlot::new(id, Arc::clone(&self.active))
             })
             .map_err(|_| {
-                tracing::warn!(max = self.max, "max sessions reached — connection rejected");
+                tracing::warn!(max = self.max, "max sessions reached - connection rejected");
             })
             .ok()
     }
