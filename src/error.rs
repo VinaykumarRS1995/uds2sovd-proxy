@@ -21,11 +21,11 @@ use crate::doip::error::Error;
 pub enum AppError {
     /// Returned when DoIP parsing or handler execution fails.
     #[error(transparent)]
-    Doip(#[from] Error),
+    DoIP(#[from] Error),
 
     /// Returned when a runtime I/O operation fails.
     #[error("io error: {0}")]
-    Io(#[from] std::io::Error),
+    IO(#[from] std::io::Error),
 
     /// Returned when configuration cannot be loaded.
     #[error("config error: {0}")]
