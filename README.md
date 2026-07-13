@@ -68,7 +68,7 @@ The core library documentation is the primary API reference.
 
 ```sh
 # View the library documentation (main entry point)
-cargo doc-lib
+cargo doc --lib
 
 # Or without dependencies documentation:
 cargo doc --package uds2sovd-proxy-lib --no-deps --open
@@ -79,14 +79,12 @@ This includes:
 - Quick start examples
 - Backend implementation guide
 
-**Additional Resources:**
-
 ```sh
 # View the server binary documentation
 cargo doc --package uds2sovd-proxy --no-deps --open
 
-# View the example client
-cargo doc --package doip-example --no-deps --open
+# View the testing client
+cargo doc --package doip-tester --no-deps --open
 
 # View all workspace crates at once
 cargo doc-all
@@ -100,7 +98,6 @@ cargo doc-all
 | [Usage](docs/usage.md) | Usage guide |
 | [Limitations](docs/limitation.md) | Current functional and operational limitations |
 | [Future work](docs/todo.md) | TODO items and roadmap |
-
 
 ## developing
 
@@ -131,3 +128,5 @@ cargo test --locked --lib
 ```
 
 #### integration tests
+
+No standalone integration-test harness is published yet for this workspace.

@@ -20,19 +20,7 @@ https://www.apache.org/licenses/LICENSE-2.0
   ```
   Opens the main library documentation with architecture overview, diagrams, and all modules
 
-- **View All Workspace Crates** (no dependencies):
-  ```sh
-  cargo doc-all
-  ```
-  Shows doipserverlib, uds2sovd-proxy, and example (test client) — no external dependency docs
-
-- **View All with Dependencies**:
-  ```sh
-  cargo doc-full
-  ```
-  Includes all external dependency documentation (verbose)
-
-Available cargo aliases are defined in `.cargo/config.toml`
+Available cargo aliases are defined in `.cargo/config.toml`; use the README for build and documentation entry points.
 
 ## Linting & Clippy
 

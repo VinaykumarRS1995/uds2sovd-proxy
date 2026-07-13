@@ -31,9 +31,9 @@
 //! # See Also
 //!
 //! - Main library: [uds2sovd_proxy_lib](../uds2sovd_proxy_lib/index.html) for API details
-//! - example client: `cargo run --bin example` for testing
+//! - Test client: `cargo run --bin doip-tester` for testing
 use std::sync::Arc;
-use uds2sovd::{config, doip, error, proxy, server};
+use uds2sovd_proxy_lib::{config, doip, error, proxy, server};
 
 use config::{ConfigProvider, DefaultConfigProvider, ServerConfig, TomlConfigProvider};
 use error::AppError;
