@@ -27,6 +27,7 @@
 //!
 //! ```no_run
 //! use uds2sovd_proxy_lib::{config, doip, proxy};
+//! use uds2sovd_proxy_lib::config::ConfigProvider;
 //! use std::sync::Arc;
 //!
 //! let cfg = config::DefaultConfigProvider::new(config::ServerConfig::default()).load()?;

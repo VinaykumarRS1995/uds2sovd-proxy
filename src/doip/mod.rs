@@ -32,13 +32,14 @@ use std::sync::Arc;
 ///
 /// ```no_run
 /// use uds2sovd_proxy_lib::doip;
-/// use uds2sovd_proxy_lib::proxy::StubProxy;
+/// use uds2sovd_proxy_lib::proxy::stub::StubProxy;
 /// use uds2sovd_proxy_lib::doip::types::LogicalAddress;
 /// use std::sync::Arc;
 ///
+/// let stub_proxy = StubProxy;
 /// let dispatcher = doip::tcp_dispatcher(
 ///     LogicalAddress::new(0x0001),
-///     Arc::new(StubProxy),
+///     Arc::new(stub_proxy),
 /// );
 /// ```
 pub fn tcp_dispatcher(
